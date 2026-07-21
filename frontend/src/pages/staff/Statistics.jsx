@@ -43,32 +43,7 @@ export default function Statistics() {
           popularRoutes: overview.popular_routes || [],
         })
       } catch (error) {
-        // Fallback mockup stats data if backend stats endpoints are empty/mocked
-        const mockRevenueOverTime = Array.from({ length: parseInt(timeRange) }).map((_, i) => {
-          const d = new Date()
-          d.setDate(d.getDate() - (parseInt(timeRange) - i - 1))
-          return {
-            date: d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
-            revenue: Math.floor(Math.random() * 8000000) + 2000000,
-            tickets: Math.floor(Math.random() * 25) + 5,
-          }
-        })
-
-        const mockPopularRoutes = [
-          { date: 'Hà Nội - Hải Phòng', revenue: 15000000 },
-          { date: 'Hà Nội - Sa Pa', revenue: 24500000 },
-          { date: 'Đà Nẵng - Huế', revenue: 8500000 },
-          { date: 'Sài Gòn - Đà Lạt', revenue: 32000000 },
-          { date: 'Sài Gòn - Nha Trang', revenue: 19000000 },
-        ]
-
-        setStats({
-          totalRevenue: 99000000,
-          totalTickets: 324,
-          cancellationRate: 4.2,
-          revenueOverTime: mockRevenueOverTime,
-          popularRoutes: mockPopularRoutes,
-        })
+        toast.error('Không thể tải dữ liệu thống kê. Vui lòng thử lại.')
       } finally {
         setLoading(false)
       }

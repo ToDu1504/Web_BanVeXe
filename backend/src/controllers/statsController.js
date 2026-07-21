@@ -22,7 +22,28 @@ const statsController = {
         ? ((cancelledTicketsCount / totalTicketsCount) * 100).toFixed(1)
         : 0
 
-      // 3. Popular Routes
+      // 3. Today / This-month figures (for Dashboard KPI widgets)
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+
+      const todayRevenue = await Invoice.sum('total_price', {
+        where: { payment_status: 'paid', created_at: { [Op.between]: [todayStart, todayEnd] } },
+      }) || 0
+
+      const monthRevenue = await Invoice.sum('total_price', {
+        where: { payment_status: 'paid', created_at: { [Op.between]: [monthStart, monthEnd] } },
+      }) || 0
+
+      const todayTicketsCount = await Ticket.count({
+        where: { booking_status: 'booked', created_at: { [Op.between]: [todayStart, todayEnd] } },
+      })
+
+      const ongoingTripsCount = await Trip.count({ where: { status: 'ongoing' } })
+
+      // 4. Popular Routes
       // Find all booked tickets, join with Trip and Route
       const activeTickets = await Ticket.findAll({
         where: { booking_status: 'booked' },
@@ -58,6 +79,10 @@ const statsController = {
         total_tickets: bookedTicketsCount,
         cancellation_rate: parseFloat(cancellationRate),
         popular_routes: popularRoutes,
+        today_revenue: todayRevenue,
+        today_tickets: todayTicketsCount,
+        month_revenue: monthRevenue,
+        ongoing_trips: ongoingTripsCount,
       })
     } catch (error) {
       console.error('Lỗi getStats:', error)

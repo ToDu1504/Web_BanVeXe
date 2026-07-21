@@ -312,7 +312,7 @@ Việc phân quyền song song ở hai tầng là cần thiết: tầng Frontend
 |---|:-:|:-:|:-:|:-:|
 | Tìm kiếm & xem chi tiết chuyến xe | ✔ | ✔ | ✔ | ✔ |
 | Đăng ký / Đăng nhập | ✔ | ✔ | ✔ | ✔ |
-| Đặt vé & chọn ghế | ✘ | ✔ | ✔ | ✔ |
+| Đặt vé & chọn ghế (riêng Nhân viên có thêm đặt hộ khách tại quầy) | ✘ | ✔ | ✔ | ✘ |
 | Hủy vé / hủy hóa đơn của mình | ✘ | ✔ | ✔ | ✔ |
 | Xem lịch sử hóa đơn cá nhân | ✘ | ✔ | ✘ | ✘ |
 | Quản lý hóa đơn & hủy vé hộ khách | ✘ | ✘ | ✔ | ✔ |
@@ -524,7 +524,7 @@ Hệ thống được phát triển và kiểm thử trong môi trường phát 
 
 Cơ sở dữ liệu `bus_ticket_db` được tạo thành công với 6 bảng đúng theo thiết kế ở mục 2.5, cùng các chỉ mục (index) hỗ trợ tối ưu truy vấn: `idx_trips_route`, `idx_trips_departure`, `idx_tickets_invoice`, `idx_tickets_trip`, `idx_invoices_user`. Ràng buộc `UNIQUE KEY uq_trip_seat (trip_id, seat_number)` trên bảng `tickets` đã được kiểm chứng hoạt động đúng: khi thử tạo hai vé cùng `trip_id` và `seat_number` trong hai giao dịch chồng nhau, giao dịch thứ hai bị từ chối bởi MySQL và được Backend chuyển hóa thành phản hồi lỗi 409 thân thiện với người dùng.
 
-Dữ liệu mẫu (`seedData.js`) khởi tạo: 3 tài khoản đại diện 3 vai trò (admin/staff/customer), 4 tuyến đường, 3 phương tiện (mỗi loại xe: standard, sleeper, limousine) và 18 chuyến xe được sinh ngày giờ khởi hành động (dynamic) để luôn có chuyến xe sắp chạy khi kiểm thử.
+Dữ liệu mẫu (`seedData.js`) khởi tạo: 3 tài khoản đại diện 3 vai trò (admin/staff/customer), 4 tuyến đường, 3 phương tiện (mỗi loại xe: standard, sleeper, limousine) và 18 chuyến xe được sinh ngày giờ khởi hành động (dynamic) để luôn có chuyến xe sắp chạy khi kiểm thử. Ngoài ra, script còn khởi tạo sẵn 5 hóa đơn mẫu kèm vé, bao phủ đủ ba trạng thái thanh toán (`pending`/`paid`/`refunded`) và tình huống hủy một vé riêng lẻ trong hóa đơn nhiều vé, trải đều trong vài ngày gần nhất — nhờ đó các trang Lịch sử hóa đơn, Quản lý hóa đơn và Thống kê đều có dữ liệu thật để quan sát ngay sau khi seed, không cần đặt vé thủ công trước. Sau khi seed, giá trị `trips.available_seats` của từng chuyến được tính lại bằng đúng số vé đang ở trạng thái `booked`, đảm bảo nhất quán với bất biến mà tầng Backend duy trì lúc vận hành thực tế.
 
 ## 3.3 Kết quả xây dựng API Backend
 
@@ -585,7 +585,7 @@ Khách hàng đã đăng nhập có thêm trang Lịch sử hóa đơn (lọc th
 
 ### 3.4.2 Nhân viên (Staff)
 
-Giao diện Nhân viên sử dụng chung layout quản trị (`AdminLayout`) với Quản trị viên nhưng menu điều hướng được giới hạn theo đúng ma trận phân quyền ở Bảng 2.2, gồm: Quản lý hóa đơn (tìm kiếm nâng cao theo tên/số điện thoại hành khách, cập nhật trạng thái thanh toán, hủy hóa đơn/hủy vé thay khách), Xem chuyến xe (bảng danh sách kèm bộ lọc trạng thái, xem sơ đồ ghế chi tiết từng chuyến ở chế độ chỉ đọc), Tra cứu tuyến xe/phương tiện (chỉ xem), Thống kê doanh thu, và mục Đặt vé hộ khách (điều hướng về trang chủ để thực hiện đúng quy trình tìm chuyến → chọn ghế → xác nhận như một khách hàng thông thường, thay vì có một luồng nghiệp vụ riêng).
+Giao diện Nhân viên sử dụng chung layout quản trị (`AdminLayout`) với Quản trị viên nhưng menu điều hướng được giới hạn theo đúng ma trận phân quyền ở Bảng 2.2, gồm: Quản lý hóa đơn (tìm kiếm nâng cao theo tên/số điện thoại hành khách, cập nhật trạng thái thanh toán, hủy hóa đơn/hủy vé thay khách), Xem chuyến xe (bảng danh sách kèm bộ lọc trạng thái, xem sơ đồ ghế chi tiết từng chuyến ở chế độ chỉ đọc), Tra cứu tuyến xe/phương tiện (chỉ xem), Thống kê doanh thu, và mục Đặt vé hộ khách — mục này **chỉ hiển thị với vai trò Nhân viên**, điều hướng về trang chủ để thực hiện đúng quy trình tìm chuyến → chọn ghế → xác nhận như một khách hàng thông thường thay vì có một luồng nghiệp vụ riêng. Quản trị viên không có mục này (đã được giới hạn cả ở menu lẫn ở tầng route để tránh truy cập trực tiếp bằng URL), do nghiệp vụ đặt vé tại quầy được xác định là trách nhiệm của Nhân viên.
 
 *Hình 3.4. Giao diện quản lý hóa đơn của Nhân viên [Chèn ảnh]*
 
@@ -612,10 +612,12 @@ Do phạm vi đồ án chưa thiết lập bộ kiểm thử tự động (unit 
 | 6 | Hủy một vé trong hóa đơn còn nhiều vé | Vé chuyển trạng thái `cancelled`, hóa đơn giữ nguyên, số ghế trống của chuyến xe tăng lại 1 | Đạt |
 | 7 | Hủy vé cuối cùng của một hóa đơn | Hóa đơn tự động bị xóa sau khi vé cuối cùng bị hủy | Đạt |
 | 8 | Cập nhật hóa đơn sang trạng thái "Đã hoàn tiền" | Toàn bộ vé đang `booked` chuyển `cancelled`, ghế được hoàn trả | Đạt |
+| 9 | Đặt vé thành công trong ngày, sau đó xem widget "Doanh thu hôm nay" / "Vé bán hôm nay" trên Dashboard | Số liệu tăng đúng theo giao dịch vừa tạo (truy vấn thật theo ngày ở Backend, không dùng số liệu ước lượng) | Đạt |
+| 10 | Truy cập trực tiếp URL `/customer/book` bằng tài khoản Quản trị viên (Admin) khi chưa chọn chuyến/ghế nào | Bị chặn ở tầng route, chuyển hướng ra khỏi trang thay vì cho vào rồi mới báo lỗi thiếu dữ liệu | Đạt |
 
 ## 3.6 Đánh giá kết quả đạt được
 
-Hệ thống đã hoàn thiện toàn bộ 8 nhóm API và 17/17 trang giao diện được đặc tả ban đầu, đáp ứng đúng ma trận phân quyền 4 vai trò. Cơ chế chống bán trùng ghế — vốn là rủi ro nghiệp vụ quan trọng nhất của bài toán đặt chỗ — hoạt động ổn định nhờ kết hợp ràng buộc `UNIQUE` ở tầng cơ sở dữ liệu và transaction ở tầng ứng dụng. Tuy nhiên, quá trình rà soát cũng ghi nhận một số hạn chế được trình bày chi tiết ở mục 4.2, chủ yếu liên quan đến độ chính xác của số liệu thống kê theo mốc thời gian ngắn (hôm nay/tháng này) và mức độ đầy đủ của dữ liệu mẫu.
+Hệ thống đã hoàn thiện toàn bộ 8 nhóm API và 17/17 trang giao diện được đặc tả ban đầu, đáp ứng đúng ma trận phân quyền 4 vai trò. Cơ chế chống bán trùng ghế — vốn là rủi ro nghiệp vụ quan trọng nhất của bài toán đặt chỗ — hoạt động ổn định nhờ kết hợp ràng buộc `UNIQUE` ở tầng cơ sở dữ liệu và transaction ở tầng ứng dụng. Qua một vòng rà soát và khắc phục bổ sung, các số liệu KPI "hôm nay/tháng này" trên Dashboard cũng đã được chuyển từ ước lượng phía Frontend sang truy vấn thật ở Backend, đồng thời dữ liệu mẫu được bổ sung hóa đơn/vé để có thể quan sát đầy đủ các chức năng liên quan đến hóa đơn ngay sau khi seed. Các hạn chế còn tồn tại sau vòng khắc phục này được trình bày ở mục 4.2.
 
 ---
 
@@ -629,18 +631,16 @@ Hệ thống đã hoàn thiện toàn bộ 8 nhóm API và 17/17 trang giao di�
 
 Bên cạnh những kết quả đạt được, đề tài còn tồn tại một số hạn chế:
 
-- **Số liệu thống kê "hôm nay/tháng này" trên Dashboard chưa chính xác tuyệt đối:** API `GET /api/stats` hiện chỉ trả về số liệu lũy kế toàn thời gian; chỉ số "doanh thu hôm nay" ở giao diện Dashboard đang được ước lượng bằng một hệ số cố định (15% tổng doanh thu) thay vì truy vấn thực theo ngày, do Backend chưa cung cấp endpoint thống kê theo mốc thời gian ngắn.
-- **Xử lý lỗi mạng ở trang Thống kê (Staff) chưa tối ưu:** khi lời gọi API thất bại, giao diện tạm thời hiển thị dữ liệu giả lập thay vì thông báo lỗi rõ ràng cho người dùng, có thể gây hiểu nhầm về tính chính xác của số liệu.
-- **Dữ liệu mẫu (seed data) chưa bao phủ đầy đủ nghiệp vụ:** script khởi tạo dữ liệu mẫu mới dừng ở người dùng, tuyến đường, phương tiện và chuyến xe, chưa sinh sẵn hóa đơn/vé mẫu, nên các chức năng liên quan đến hóa đơn (lịch sử, quản lý, thống kê) cần thao tác đặt vé thủ công mới có dữ liệu để quan sát.
+- **Số liệu thống kê mới dừng ở mốc "hôm nay" và "tháng này":** Backend đã cung cấp số liệu thật cho hai mốc thời gian này (`today_revenue`, `today_tickets`, `month_revenue`), nhưng chưa hỗ trợ mốc tùy chọn khác (ví dụ "tuần này") hay so sánh với cùng kỳ trước đó — đây là hướng mở rộng còn lại được trình bày ở mục 4.3.
 - **Chưa tích hợp cổng thanh toán thực tế:** các phương thức thanh toán (chuyển khoản, ví điện tử) hiện chỉ lưu trạng thái, chưa kết nối API cổng thanh toán thật.
 - **Chưa có bộ kiểm thử tự động:** toàn bộ việc kiểm thử hiện dựa trên thao tác thủ công trên giao diện, chưa có unit test/integration test để đảm bảo hồi quy (regression) khi mở rộng tính năng về sau.
-- **Chưa hỗ trợ cập nhật dữ liệu theo thời gian thực:** một số màn hình quản trị (ví dụ danh sách chuyến xe) cần người dùng chủ động làm mới trang để thấy thay đổi ghế trống do người dùng khác thao tác, do hệ thống chưa áp dụng WebSocket hoặc cơ chế polling.
+- **Chưa hỗ trợ cập nhật dữ liệu theo thời gian thực:** một số màn hình quản trị (ví dụ danh sách chuyến xe) cần người dùng chủ động làm mới trang hoặc quay lại tab để thấy thay đổi ghế trống do người dùng khác thao tác, do hệ thống chưa áp dụng WebSocket hoặc cơ chế polling (hiện chỉ có refetch thủ công và refetch khi tab được focus lại).
 
 ## 4.3 Hướng phát triển
 
 Từ những hạn chế nêu trên, đề tài có thể được mở rộng theo các hướng sau:
 
-1. Bổ sung endpoint thống kê theo khoảng thời gian tùy chọn (hôm nay, tuần này, tháng này) ở Backend, thay thế hoàn toàn các số liệu ước lượng phía Frontend.
+1. Mở rộng endpoint thống kê để hỗ trợ thêm mốc thời gian tùy chọn (tuần này, so sánh cùng kỳ) bên cạnh hai mốc "hôm nay" và "tháng này" đã có, phục vụ nhu cầu báo cáo đa dạng hơn cho Nhân viên/Quản trị.
 2. Tích hợp cổng thanh toán trực tuyến thực tế (VNPay, Momo, ZaloPay) thông qua API/Webhook, tự động cập nhật trạng thái hóa đơn khi nhận được xác nhận thanh toán.
 3. Bổ sung thông báo tức thời (real-time) bằng WebSocket/Socket.IO để đồng bộ trạng thái ghế giữa nhiều người dùng đang xem cùng một chuyến xe, hạn chế thao tác làm mới thủ công.
 4. Xây dựng bộ kiểm thử tự động (Jest cho Backend, Vitest/React Testing Library cho Frontend) và tích hợp CI/CD để đảm bảo chất lượng khi phát triển thêm tính năng.

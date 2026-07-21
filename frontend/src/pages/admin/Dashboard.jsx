@@ -16,16 +16,16 @@ export default function Dashboard() {
   const [upcomingTrips, setUpcomingTrips] = useState([])
   const [userCount, setUserCount] = useState(0)
   const [stats, setStats] = useState({
-    todayRevenue: 15400000,
-    todayTickets: 32,
-    todayTrips: 8,
+    todayRevenue: 0,
+    todayTickets: 0,
+    ongoingTrips: 0,
   })
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true)
-        
+
         // Fetch users
         const users = await userApi.getAll()
         setUserCount(users.length)
@@ -40,32 +40,12 @@ export default function Dashboard() {
         // Fetch stats
         const overview = await statsApi.getStats()
         setStats({
-          todayRevenue: overview.total_revenue * 0.15 || 4500000, // mock today revenue as 15% of total
-          todayTickets: overview.total_tickets || 24,
-          todayTrips: trips.length || 6,
+          todayRevenue: overview.today_revenue,
+          todayTickets: overview.today_tickets,
+          ongoingTrips: overview.ongoing_trips,
         })
       } catch (error) {
-        // Fallback mockup
-        setUpcomingTrips([
-          {
-            id: 1,
-            departure_time: new Date(Date.now() + 86400000).toISOString(),
-            price: 150000,
-            available_seats: 12,
-            Route: { origin: 'Hà Nội', destination: 'Hải Phòng' },
-            Vehicle: { license_plate: '29B-12345', vehicle_type: 'sleeper' },
-            status: 'scheduled',
-          },
-          {
-            id: 2,
-            departure_time: new Date(Date.now() + 172800000).toISOString(),
-            price: 250000,
-            available_seats: 20,
-            Route: { origin: 'Sài Gòn', destination: 'Đà Lạt' },
-            Vehicle: { license_plate: '51B-98765', vehicle_type: 'limousine' },
-            status: 'scheduled',
-          },
-        ])
+        toast.error('Không thể tải dữ liệu tổng quan. Vui lòng thử tải lại trang.')
       } finally {
         setLoading(false)
       }
@@ -132,9 +112,9 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-black text-[hsl(var(--foreground))]">
-                  {stats.todayTrips} chuyến
+                  {stats.ongoingTrips} chuyến
                 </div>
-                <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-1">Tổng chuyến xe trên hệ thống</p>
+                <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-1">Chuyến xe đang chạy (ongoing)</p>
               </CardContent>
             </Card>
 

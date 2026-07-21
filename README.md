@@ -442,7 +442,7 @@ VITE_API_URL=http://localhost:5000/api
 | Trang chủ & Tìm kiếm chuyến xe | ✅ | ✅ | ✅ | ✅ |
 | Chi tiết chuyến xe (xem) | ✅ | ✅ | ✅ | ✅ |
 | Đăng ký / Đăng nhập | ✅ | ✅ | ✅ | ✅ |
-| Đặt vé & Chọn ghế (bao gồm đặt hộ) | ❌ | ✅ | ✅ | ✅ |
+| Đặt vé & Chọn ghế (Nhân viên có thêm chức năng đặt hộ khách) | ❌ | ✅ | ✅ | ❌ |
 | Hủy vé / Hủy hóa đơn | ❌ | ✅ | ✅ | ✅ |
 | Xem lịch sử hóa đơn (của tôi) | ❌ | ✅ | ❌ | ❌ |
 | Cập nhật thông tin cá nhân | ❌ | ✅ | ✅ | ✅ |
