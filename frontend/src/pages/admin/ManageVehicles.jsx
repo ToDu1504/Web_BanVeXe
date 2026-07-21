@@ -13,6 +13,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod'
 import { Plus, Edit2, Trash2, Bus, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import SeatMap from '@/components/features/SeatMap'
 
 const vehicleSchema = zod.object({
   license_plate: zod.string().regex(/^[0-9]{2}[A-Z]-[0-9]{4,5}$/, 'Biển số xe phải đúng định dạng (Ví dụ: 29B-12345 hoặc 51A-9999)'),
@@ -58,6 +59,18 @@ export default function ManageVehicles() {
   // Watch fields to auto update total seats depending on layout rows & cols
   const watchedLayoutStr = watch('seat_layout_str')
   const watchedType = watch('vehicle_type')
+  const watchedTotalSeats = watch('total_seats')
+
+  // Parse the JSON layout string live for the seat map preview below the field
+  let previewLayout = null
+  try {
+    const parsed = JSON.parse(watchedLayoutStr)
+    if (parsed && typeof parsed === 'object' && parsed.floors && parsed.rows && parsed.cols) {
+      previewLayout = parsed
+    }
+  } catch {
+    // invalid JSON while typing — no preview until it's valid
+  }
 
   // Auto set layout defaults when vehicle type changes and not editing
   useEffect(() => {
@@ -247,7 +260,7 @@ export default function ManageVehicles() {
 
       {/* Add / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingVehicle ? `Chỉnh sửa xe khách V-${editingVehicle.id}` : 'Thêm phương tiện xe mới'}
@@ -315,6 +328,26 @@ export default function ManageVehicles() {
                 <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
                   * Nhập cấu hình: floors (số tầng), rows (số hàng ghế), cols (số cột ghế).
                 </p>
+              </div>
+
+              {/* Live Seat Map Preview */}
+              <div className="space-y-1.5">
+                <Label>Xem trước sơ đồ ghế</Label>
+                {previewLayout ? (
+                  <div className="max-h-72 overflow-y-auto">
+                    <SeatMap
+                      totalSeats={watchedTotalSeats}
+                      layout={previewLayout}
+                      bookedSeats={[]}
+                      selectedSeats={[]}
+                      onSeatClick={() => {}}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-[hsl(var(--muted-foreground))] italic border border-dashed border-[hsl(var(--border))] rounded-lg p-4 text-center">
+                    JSON chưa hợp lệ hoặc thiếu floors/rows/cols — chưa thể xem trước sơ đồ.
+                  </p>
+                )}
               </div>
 
             </div>
