@@ -1,0 +1,35 @@
+import axiosInstance from './axiosInstance'
+
+export const tripApi = {
+  search: async ({ origin, destination, date, passengers }) => {
+    const response = await axiosInstance.get('/trips/search', {
+      params: { origin, destination, date, passengers },
+    })
+    return response.data
+  },
+  getById: async (id) => {
+    const response = await axiosInstance.get(`/trips/${id}`)
+    return response.data
+  },
+  getBookedSeats: async (id) => {
+    const response = await axiosInstance.get(`/trips/${id}/booked-seats`)
+    return response.data
+  },
+  // Admin endpoints
+  getAll: async () => {
+    const response = await axiosInstance.get('/trips')
+    return response.data
+  },
+  create: async (tripData) => {
+    const response = await axiosInstance.post('/trips', tripData)
+    return response.data
+  },
+  update: async (id, tripData) => {
+    const response = await axiosInstance.put(`/trips/${id}`, tripData)
+    return response.data
+  },
+  delete: async (id) => {
+    const response = await axiosInstance.delete(`/trips/${id}`)
+    return response.data
+  },
+}
