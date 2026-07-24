@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VexereBus — a bus-ticket-selling web app with four roles: Guest (Khách Vãng Lai), Customer (Khách Hàng), Staff (Nhân Viên), Admin (Quản Trị Viên). Monorepo with independent `backend/` and `frontend/` apps (no shared package manager workspace — each has its own `node_modules`/`package.json`).
+Đặt Vé Xe Khách — a bus-ticket-selling web app with four roles: Guest (Khách Vãng Lai), Customer (Khách Hàng), Staff (Nhân Viên), Admin (Quản Trị Viên). Monorepo with independent `backend/` and `frontend/` apps (no shared package manager workspace — each has its own `node_modules`/`package.json`).
 
 ## Commands
 

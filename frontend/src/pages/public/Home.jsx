@@ -8,10 +8,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import TripCard from '@/components/features/TripCard'
-import { Search, MapPin, Calendar as CalendarIcon, ArrowRightLeft, Bus, Loader2 } from 'lucide-react'
+import { Search, MapPin, Calendar as CalendarIcon, ArrowRightLeft, ArrowRight, Bus, Loader2 } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
 import { toast } from 'sonner'
 
 export default function Home() {
+  const [routes, setRoutes] = useState([])
   const [origins, setOrigins] = useState([])
   const [destinations, setDestinations] = useState([])
   const [searchParams, setSearchParams] = useState({
@@ -19,7 +21,7 @@ export default function Home() {
     destination: '',
     date: new Date().toISOString().split('T')[0],
   })
-  
+
   const [loadingRoutes, setLoadingRoutes] = useState(true)
   const [searching, setSearching] = useState(false)
   const [trips, setTrips] = useState([])
@@ -30,6 +32,7 @@ export default function Home() {
     const fetchRoutes = async () => {
       try {
         const data = await routeApi.getAll()
+        setRoutes(data)
         const uniqueOrigins = [...new Set(data.map(r => r.origin))]
         const uniqueDestinations = [...new Set(data.map(r => r.destination))]
         setOrigins(uniqueOrigins)
@@ -43,27 +46,31 @@ export default function Home() {
     fetchRoutes()
   }, [])
 
-  const handleSearch = async (e) => {
-    e.preventDefault()
-    if (!searchParams.origin || !searchParams.destination) {
-      toast.warning('Vui lòng chọn đầy đủ Điểm đi và Điểm đến!')
-      return
-    }
-    
+  const performSearch = async (origin, destination, date) => {
     setSearching(true)
     setHasSearched(true)
     try {
-      const data = await tripApi.search({
-        origin: searchParams.origin,
-        destination: searchParams.destination,
-        date: searchParams.date,
-      })
+      const data = await tripApi.search({ origin, destination, date })
       setTrips(data)
     } catch (error) {
       toast.error('Có lỗi xảy ra khi tìm chuyến xe')
     } finally {
       setSearching(false)
     }
+  }
+
+  const handleSearch = async (e) => {
+    e.preventDefault()
+    if (!searchParams.origin || !searchParams.destination) {
+      toast.warning('Vui lòng chọn đầy đủ Điểm đi và Điểm đến!')
+      return
+    }
+    await performSearch(searchParams.origin, searchParams.destination, searchParams.date)
+  }
+
+  const handleQuickRoute = (route) => {
+    setSearchParams(prev => ({ ...prev, origin: route.origin, destination: route.destination }))
+    performSearch(route.origin, route.destination, searchParams.date)
   }
 
   const swapLocations = () => {
@@ -251,9 +258,46 @@ export default function Home() {
         )}
 
         {!searching && !hasSearched && (
-          <div className="text-center py-16 space-y-3 text-[hsl(var(--muted-foreground))]">
-            <Bus className="h-16 w-16 mx-auto opacity-20 stroke-[1.5]" />
-            <p className="text-md">Chọn thông tin hành trình phía trên để tìm chuyến xe của bạn</p>
+          <div className="space-y-10">
+            <div className="text-center py-6 space-y-3 text-[hsl(var(--muted-foreground))]">
+              <Bus className="h-16 w-16 mx-auto opacity-20 stroke-[1.5]" />
+              <p className="text-md">Chọn thông tin hành trình phía trên để tìm chuyến xe của bạn</p>
+            </div>
+
+            {!loadingRoutes && routes.length > 0 && (
+              <div>
+                <h3 className="font-bold text-lg text-center mb-6">Tuyến Đường Phổ Biến</h3>
+                <motion.div
+                  variants={containerVariants}
+                  initial="hidden"
+                  animate="show"
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+                >
+                  {routes.map((route) => (
+                    <motion.div key={route.id} variants={itemVariants}>
+                      <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleQuickRoute(route)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleQuickRoute(route)}
+                        className="border border-[hsl(var(--border))] cursor-pointer transition-all hover:border-[hsl(var(--primary))] hover:shadow-md"
+                      >
+                        <CardContent className="p-4 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 font-semibold text-sm">
+                            <span>{route.origin}</span>
+                            <ArrowRight className="h-3.5 w-3.5 text-[hsl(var(--muted-foreground))] shrink-0" />
+                            <span>{route.destination}</span>
+                          </div>
+                          <span className="text-xs font-bold text-[hsl(var(--primary))] whitespace-nowrap">
+                            Từ {formatCurrency(route.base_price)}
+                          </span>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </div>
+            )}
           </div>
         )}
       </section>

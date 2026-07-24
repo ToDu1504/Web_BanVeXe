@@ -126,7 +126,7 @@ export default function AdminLayout({ children }) {
           {!isCollapsed && (
             <Link to="/" className="flex items-center space-x-2 text-[hsl(var(--primary))] font-bold text-lg">
               <BusIcon className="h-5 w-5 stroke-[2.5]" />
-              <span>VexereBus Admin</span>
+              <span>Đặt Vé Xe Khách Admin</span>
             </Link>
           )}
           {isCollapsed && (
@@ -254,7 +254,7 @@ export default function AdminLayout({ children }) {
             <div className="flex h-10 items-center justify-between border-b border-[hsl(var(--border))] pb-2">
               <span className="font-bold text-[hsl(var(--primary))] flex items-center gap-2">
                 <BusIcon className="h-5 w-5" />
-                VexereBus Admin
+                Đặt Vé Xe Khách Admin
               </span>
             </div>
             <nav className="flex-1 space-y-2">

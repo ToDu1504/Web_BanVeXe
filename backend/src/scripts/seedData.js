@@ -17,7 +17,7 @@ const seedData = async () => {
     const users = await User.bulkCreate([
       {
         full_name: 'Quản Trị Viên',
-        email: 'admin@vexerebus.vn',
+        email: 'admin@datvexekhach.vn',
         phone: '0987654321',
         password: 'password',
         role: 'admin',
@@ -25,7 +25,7 @@ const seedData = async () => {
       },
       {
         full_name: 'Nhân Viên Điều Phối',
-        email: 'staff@vexerebus.vn',
+        email: 'staff@datvexekhach.vn',
         phone: '0987654322',
         password: 'password',
         role: 'staff',
@@ -33,7 +33,7 @@ const seedData = async () => {
       },
       {
         full_name: 'Khách Hàng Thân Thiết',
-        email: 'customer@vexerebus.vn',
+        email: 'customer@datvexekhach.vn',
         phone: '0987654323',
         password: 'password',
         role: 'customer',

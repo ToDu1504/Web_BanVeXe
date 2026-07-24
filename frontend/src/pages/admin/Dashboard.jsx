@@ -64,7 +64,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Quản Trị Tổng Quan</h2>
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">Chào mừng trở lại trang quản trị của VexereBus.</p>
+        <p className="text-sm text-[hsl(var(--muted-foreground))]">Chào mừng trở lại trang quản trị của Đặt Vé Xe Khách.</p>
       </div>
 
       {loading ? (

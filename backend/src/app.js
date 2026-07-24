@@ -33,7 +33,7 @@ app.use(cookieParser())
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'OK', message: 'Hệ thống VexereBus hoạt động bình thường.' })
+  res.status(200).json({ status: 'OK', message: 'Hệ thống Đặt Vé Xe Khách hoạt động bình thường.' })
 })
 
 // API Routes

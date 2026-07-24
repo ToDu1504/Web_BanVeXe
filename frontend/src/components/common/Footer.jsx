@@ -9,7 +9,7 @@ export default function Footer() {
           <div className="flex flex-col space-y-4">
             <div className="flex items-center space-x-2 text-[hsl(var(--primary))] font-bold text-xl">
               <Bus className="h-6 w-6 stroke-[2.5]" />
-              <span>VexereBus</span>
+              <span>Đặt Vé Xe Khách</span>
             </div>
             <p className="text-sm text-[hsl(var(--muted-foreground))]">
               Hệ thống bán vé xe khách trực tuyến hàng đầu Việt Nam. Mang lại trải nghiệm đặt vé nhanh chóng, an toàn và tiện lợi nhất.
@@ -42,7 +42,7 @@ export default function Footer() {
             </div>
             <div className="flex items-center space-x-2 text-sm text-[hsl(var(--muted-foreground))]">
               <Mail className="h-4 w-4" />
-              <span>support@vexerebus.vn</span>
+              <span>support@datvexekhach.vn</span>
             </div>
             <div className="flex items-center space-x-2 text-sm text-[hsl(var(--muted-foreground))]">
               <MapPin className="h-4 w-4" />
@@ -52,7 +52,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-8 border-t border-[hsl(var(--border))] pt-6 text-center text-xs text-[hsl(var(--muted-foreground))]">
-          © {new Date().getFullYear()} VexereBus. All rights reserved. Built with premium design standards.
+          © {new Date().getFullYear()} Đặt Vé Xe Khách. All rights reserved. Built with premium design standards.
         </div>
       </div>
     </footer>

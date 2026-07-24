@@ -31,7 +31,7 @@ Còn thiếu, bạn cần tự điền:
 
 # ĐỒ ÁN CƠ SỞ
 
-## ĐỀ TÀI: XÂY DỰNG HỆ THỐNG QUẢN LÝ BÁN VÉ XE KHÁCH TRỰC TUYẾN (VEXEREBUS)
+## ĐỀ TÀI: XÂY DỰNG HỆ THỐNG QUẢN LÝ BÁN VÉ XE KHÁCH TRỰC TUYẾN (ĐẶT VÉ XE KHÁCH)
 
 **Giảng viên hướng dẫn:** [Họ và tên GVHD]
 
@@ -183,7 +183,7 @@ Vận tải hành khách liên tỉnh bằng xe khách là một trong những h
 - Nhà xe khó tổng hợp báo cáo doanh thu, thống kê tuyến đường đông khách để tối ưu lịch chạy.
 - Việc phân quyền xử lý nghiệp vụ giữa nhân viên bán vé và quản trị hệ thống không rõ ràng, tiềm ẩn rủi ro về bảo mật thông tin khách hàng.
 
-Xuất phát từ thực trạng trên, đề tài **"Xây dựng hệ thống quản lý bán vé xe khách trực tuyến" (VexereBus)** được thực hiện nhằm xây dựng một ứng dụng web hoàn chỉnh, cho phép số hóa toàn bộ quy trình tra cứu, đặt vé, quản lý chuyến xe và thống kê doanh thu, phục vụ đồng thời bốn nhóm đối tượng sử dụng: Khách vãng lai, Khách hàng, Nhân viên và Quản trị viên.
+Xuất phát từ thực trạng trên, đề tài **"Xây dựng hệ thống quản lý bán vé xe khách trực tuyến" (Đặt Vé Xe Khách)** được thực hiện nhằm xây dựng một ứng dụng web hoàn chỉnh, cho phép số hóa toàn bộ quy trình tra cứu, đặt vé, quản lý chuyến xe và thống kê doanh thu, phục vụ đồng thời bốn nhóm đối tượng sử dụng: Khách vãng lai, Khách hàng, Nhân viên và Quản trị viên.
 
 ## 1.2 Mục tiêu đề tài
 
@@ -238,7 +238,7 @@ Ngoài phần Mở đầu, đồ án được trình bày trong 4 chương:
 
 ## 2.1 Kiến trúc tổng thể hệ thống
 
-Hệ thống VexereBus được xây dựng theo kiến trúc **Client - Server tách biệt (decoupled architecture)**, gồm hai ứng dụng độc lập giao tiếp với nhau thông qua REST API:
+Hệ thống Đặt Vé Xe Khách được xây dựng theo kiến trúc **Client - Server tách biệt (decoupled architecture)**, gồm hai ứng dụng độc lập giao tiếp với nhau thông qua REST API:
 
 - **Frontend (Client):** ứng dụng React.js dạng Single Page Application (SPA), chịu trách nhiệm hiển thị giao diện và gọi API.
 - **Backend (Server):** ứng dụng Node.js/Express cung cấp REST API, xử lý nghiệp vụ và giao tiếp với cơ sở dữ liệu MySQL thông qua Sequelize ORM.

@@ -38,7 +38,7 @@ export default function Navbar() {
         {/* Logo */}
         <Link to="/" className="flex items-center space-x-2 text-[hsl(var(--primary))] font-bold text-xl hover:opacity-90">
           <Bus className="h-6 w-6 stroke-[2.5]" />
-          <span>VexereBus</span>
+          <span>Đặt Vé Xe Khách</span>
         </Link>
 
         {/* Desktop Navigation */}

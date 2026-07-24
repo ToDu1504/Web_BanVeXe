@@ -5,7 +5,7 @@ GHI CHÚ SỬ DỤNG (xóa khối này trước khi nộp):
   - Cột "Xác nhận của GVHD" để trống — đưa phiếu cho GVHD ký sau mỗi buổi gặp/báo cáo
     hàng tuần, không ký gộp một lần ở cuối kỳ.
   - Nội dung 10 tuần dưới đây bám sát đúng phạm vi đồ án đã có trong README.md và
-    BaoCao.md (hệ thống VexereBus). Có thể điều chỉnh câu chữ nếu tiến độ thực tế
+    BaoCao.md (hệ thống Đặt Vé Xe Khách). Có thể điều chỉnh câu chữ nếu tiến độ thực tế
     của bạn lệch đi (ví dụ dồn/tách công việc giữa các tuần) — nhưng nên giữ đúng
     thứ tự logic: khảo sát → thiết kế → backend → frontend từng vai trò → kiểm thử
     → viết báo cáo, vì đây là trình tự đã tạo ra sản phẩm thật.
@@ -18,7 +18,7 @@ GHI CHÚ SỬ DỤNG (xóa khối này trước khi nộp):
 
 # PHIẾU THEO DÕI TIẾN ĐỘ THỰC HIỆN ĐỒ ÁN CƠ SỞ
 
-**Tên đề tài:** Xây dựng hệ thống quản lý bán vé xe khách trực tuyến (VexereBus)
+**Tên đề tài:** Xây dựng hệ thống quản lý bán vé xe khách trực tuyến (Đặt Vé Xe Khách)
 
 **Giảng viên hướng dẫn:** [Họ và tên GVHD]
 

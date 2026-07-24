@@ -10,7 +10,7 @@ const startServer = async () => {
   await connectDB()
 
   app.listen(PORT, () => {
-    console.log(`🚌 VexereBus Server đang chạy tại: http://localhost:${PORT}`)
+    console.log(`🚌 Đặt Vé Xe Khách Server đang chạy tại: http://localhost:${PORT}`)
     console.log(`📦 Môi trường: ${process.env.NODE_ENV || 'development'}`)
     console.log(`📋 Đọc API docs tại: http://localhost:${PORT}/api/health`)
   })
