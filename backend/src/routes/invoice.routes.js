@@ -16,6 +16,7 @@ router.delete('/:id', authorize('customer', 'staff', 'admin'), invoiceController
 
 // Staff/Admin can view all and update invoice status
 router.get('/', authorize('staff', 'admin'), invoiceController.getAll)
+router.get('/:id', authorize('customer', 'staff', 'admin'), invoiceController.getById)
 router.put('/:id/status', authorize('staff', 'admin'), validate(schemas.updateInvoiceStatus), invoiceController.updateStatus)
 
 module.exports = router

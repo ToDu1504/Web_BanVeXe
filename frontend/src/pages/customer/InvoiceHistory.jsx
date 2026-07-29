@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { invoiceApi } from '@/api/invoiceApi'
 import { ticketApi } from '@/api/ticketApi'
+import { paymentApi } from '@/api/paymentApi'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,7 @@ export default function InvoiceHistory() {
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [cancellingId, setCancellingId] = useState(null)
+  const [payingId, setPayingId] = useState(null)
 
   const fetchInvoices = async () => {
     try {
@@ -59,6 +61,17 @@ export default function InvoiceHistory() {
     }
   }
 
+  const handlePayMomo = async (invoiceId) => {
+    setPayingId(invoiceId)
+    try {
+      const { payUrl } = await paymentApi.createMomoPayment(invoiceId)
+      window.location.href = payUrl
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Không thể khởi tạo thanh toán MoMo')
+      setPayingId(null)
+    }
+  }
+
   const handleCancelTicket = async (ticketId) => {
     if (!window.confirm('Bạn có chắc chắn muốn hủy chiếc vé này?')) return
 
@@ -83,7 +96,6 @@ export default function InvoiceHistory() {
 
   const paymentMethodLabels = {
     cash: 'Tiền mặt',
-    banking: 'Chuyển khoản',
     momo: 'Ví Momo',
   }
 
@@ -140,6 +152,20 @@ export default function InvoiceHistory() {
                         >
                           <Eye className="h-4 w-4 mr-1" /> Chi tiết
                         </Button>
+                        {invoice.payment_status === 'pending' && invoice.payment_method === 'momo' && (
+                          <Button
+                            variant="accent"
+                            size="sm"
+                            disabled={payingId === invoice.id}
+                            onClick={() => handlePayMomo(invoice.id)}
+                          >
+                            {payingId === invoice.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              'Thanh toán MoMo'
+                            )}
+                          </Button>
+                        )}
                         {invoice.payment_status === 'pending' && (
                           <Button
                             variant="destructive"

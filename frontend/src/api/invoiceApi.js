@@ -10,6 +10,10 @@ export const invoiceApi = {
     const response = await axiosInstance.get('/invoices/my')
     return response.data
   },
+  getById: async (id) => {
+    const response = await axiosInstance.get(`/invoices/${id}`)
+    return response.data
+  },
   cancelInvoice: async (id) => {
     const response = await axiosInstance.delete(`/invoices/${id}`)
     return response.data

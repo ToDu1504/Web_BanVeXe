@@ -125,7 +125,7 @@ const schemas = {
   // Invoice
   createInvoice: Joi.object({
     total_price: Joi.number().required(),
-    payment_method: Joi.string().valid('cash', 'banking', 'momo').required(),
+    payment_method: Joi.string().valid('cash', 'momo').required(),
     tickets: Joi.array().items(
       Joi.object({
         trip_id: Joi.number().integer().required(),

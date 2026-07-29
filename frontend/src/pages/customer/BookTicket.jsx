@@ -6,12 +6,13 @@ import * as zod from 'zod'
 import { useBooking } from '@/hooks/useBooking'
 import { useAuth } from '@/hooks/useAuth'
 import { invoiceApi } from '@/api/invoiceApi'
+import { paymentApi } from '@/api/paymentApi'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Bus, MapPin, Calendar, Clock, CreditCard, Landmark, Banknote, ArrowRight, Loader2 } from 'lucide-react'
+import { Bus, MapPin, Calendar, Clock, CreditCard, Banknote, ArrowRight, Loader2 } from 'lucide-react'
 import { formatCurrency, formatDateTime, formatDuration } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -22,7 +23,7 @@ const passengerSchema = zod.object({
 
 const bookingFormSchema = zod.object({
   passengers: zod.array(passengerSchema),
-  paymentMethod: zod.enum(['cash', 'banking', 'momo']),
+  paymentMethod: zod.enum(['cash', 'momo']),
 })
 
 export default function BookTicket() {
@@ -53,7 +54,7 @@ export default function BookTicket() {
         fullName: s.passengerName || user?.full_name || '',
         phone: s.passengerPhone || user?.phone || '',
       })),
-      paymentMethod: 'banking',
+      paymentMethod: 'momo',
     },
   })
 
@@ -80,14 +81,33 @@ export default function BookTicket() {
         ticket_price: selectedTrip.price,
       }))
 
-      await invoiceApi.create({
+      const result = await invoiceApi.create({
         total_price: totalPrice,
         payment_method: data.paymentMethod,
         tickets,
       })
 
-      toast.success('Đặt vé thành công! Vui lòng thanh toán hóa đơn.')
       setBookingSuccess(true) // Prevent the "missing trip/seats" guard from firing on reset
+
+      // Momo: redirect the user to the MoMo sandbox payment page to finish payment.
+      // The invoice/tickets already exist (pending) regardless of the outcome, so
+      // if creating the payment link fails, fall back to the invoice history page
+      // where the customer can retry payment.
+      if (data.paymentMethod === 'momo') {
+        try {
+          const { payUrl } = await paymentApi.createMomoPayment(result.invoiceId)
+          resetBooking()
+          window.location.href = payUrl
+          return
+        } catch (momoError) {
+          toast.error(momoError.response?.data?.message || 'Không thể khởi tạo thanh toán MoMo. Vui lòng thử lại từ lịch sử hóa đơn.')
+          resetBooking()
+          navigate('/customer/invoices')
+          return
+        }
+      }
+
+      toast.success('Đặt vé thành công! Vui lòng thanh toán hóa đơn.')
       resetBooking() // Clear booking state
       navigate('/customer/invoices')
     } catch (error) {
@@ -175,22 +195,7 @@ export default function BookTicket() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Banking */}
-                  <label className="flex items-center space-x-3 p-4 border border-[hsl(var(--border))] rounded-xl cursor-pointer hover:bg-[hsl(var(--muted))/25] transition-all has-[:checked]:border-[hsl(var(--primary))] has-[:checked]:bg-[hsl(var(--primary))/5]">
-                    <input
-                      type="radio"
-                      value="banking"
-                      {...register('paymentMethod')}
-                      className="text-[hsl(var(--primary))]"
-                    />
-                    <Landmark className="h-5 w-5 text-blue-500 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-sm">Chuyển khoản</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">Internet Banking / QR</p>
-                    </div>
-                  </label>
-
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Momo */}
                   <label className="flex items-center space-x-3 p-4 border border-[hsl(var(--border))] rounded-xl cursor-pointer hover:bg-[hsl(var(--muted))/25] transition-all has-[:checked]:border-[hsl(var(--primary))] has-[:checked]:bg-[hsl(var(--primary))/5]">
                     <input

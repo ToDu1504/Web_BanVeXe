@@ -186,7 +186,7 @@ const seedData = async () => {
       {
         tripIndex: 0,
         user: customerUser,
-        payment_method: 'banking',
+        payment_method: 'momo',
         payment_status: 'paid',
         created_at: new Date(),
         seats: [
@@ -233,7 +233,7 @@ const seedData = async () => {
       {
         tripIndex: 10,
         user: customerUser,
-        payment_method: 'banking',
+        payment_method: 'cash',
         payment_status: 'refunded',
         created_at: daysAgo(3),
         seats: [

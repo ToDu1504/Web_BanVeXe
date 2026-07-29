@@ -16,6 +16,7 @@ import Register from '@/pages/auth/Register'
 import BookTicket from '@/pages/customer/BookTicket'
 import InvoiceHistory from '@/pages/customer/InvoiceHistory'
 import Profile from '@/pages/customer/Profile'
+import PaymentReturn from '@/pages/customer/PaymentReturn'
 
 // Staff Protected Pages
 import ManageInvoice from '@/pages/staff/ManageInvoice'
@@ -95,6 +96,16 @@ export default function AppRouter() {
           <PrivateRoute allowedRoles={['customer', 'staff', 'admin']}>
             <PageLayout>
               <Profile />
+            </PageLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/payment/momo/return"
+        element={
+          <PrivateRoute allowedRoles={['customer', 'staff', 'admin']}>
+            <PageLayout>
+              <PaymentReturn />
             </PageLayout>
           </PrivateRoute>
         }

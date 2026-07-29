@@ -165,6 +165,40 @@ const invoiceController = {
     }
   },
 
+  // @desc    Get a single invoice by id
+  // @route   GET /api/invoices/:id
+  // @access  Private (owner customer, or staff/admin)
+  getById: async (req, res) => {
+    try {
+      const invoice = await Invoice.findByPk(req.params.id, {
+        include: [
+          {
+            model: Ticket,
+            include: [
+              {
+                model: Trip,
+                include: [Route, Vehicle],
+              },
+            ],
+          },
+        ],
+      })
+
+      if (!invoice) {
+        return res.status(404).json({ message: 'Không tìm thấy hóa đơn.' })
+      }
+
+      if (req.user.role === 'customer' && invoice.user_id !== req.user.id) {
+        return res.status(403).json({ message: 'Bạn không có quyền xem hóa đơn này.' })
+      }
+
+      return res.status(200).json(invoice)
+    } catch (error) {
+      console.error('Lỗi invoice getById:', error)
+      return res.status(500).json({ message: 'Lỗi máy chủ khi tải hóa đơn.' })
+    }
+  },
+
   // @desc    Get all invoices (Admin/Staff)
   // @route   GET /api/invoices
   // @access  Private/Staff/Admin

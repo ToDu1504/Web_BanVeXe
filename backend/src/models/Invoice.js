@@ -16,7 +16,7 @@ const Invoice = sequelize.define('Invoice', {
     allowNull: false,
   },
   payment_method: {
-    type: DataTypes.ENUM('cash', 'banking', 'momo'),
+    type: DataTypes.ENUM('cash', 'momo'),
     defaultValue: 'cash',
   },
   payment_status: {

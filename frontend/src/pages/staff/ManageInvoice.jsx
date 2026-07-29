@@ -143,7 +143,6 @@ export default function ManageInvoice() {
 
   const paymentMethodLabels = {
     cash: 'Tiền mặt',
-    banking: 'Chuyển khoản',
     momo: 'Ví Momo',
   }
 

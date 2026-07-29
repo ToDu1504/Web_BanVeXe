@@ -13,7 +13,8 @@ bus-ticket-system/
 ├── backend/                    # Node.js + Express
 │   ├── src/
 │   │   ├── config/
-│   │   │   └── db.js           # Kết nối database (Sequelize)
+│   │   │   ├── db.js           # Kết nối database (Sequelize)
+│   │   │   └── momo.config.js  # [MỚI] Credentials sandbox cổng thanh toán MoMo
 │   │   ├── controllers/
 │   │   │   ├── authController.js
 │   │   │   ├── userController.js
@@ -22,7 +23,10 @@ bus-ticket-system/
 │   │   │   ├── routeController.js
 │   │   │   ├── tripController.js
 │   │   │   ├── vehicleController.js
-│   │   │   └── statsController.js
+│   │   │   ├── statsController.js
+│   │   │   └── paymentController.js # [MỚI] Tạo/xác thực thanh toán MoMo
+│   │   ├── services/
+│   │   │   └── momoService.js  # [MỚI] Ký request & xác thực chữ ký callback MoMo
 │   │   ├── middlewares/
 │   │   │   ├── auth.js         # JWT middleware (đọc từ HttpOnly Cookie)
 │   │   │   ├── role.js         # Phân quyền theo role
@@ -42,7 +46,8 @@ bus-ticket-system/
 │   │   │   ├── route.routes.js
 │   │   │   ├── trip.routes.js
 │   │   │   ├── vehicle.routes.js
-│   │   │   └── stats.routes.js
+│   │   │   ├── stats.routes.js
+│   │   │   └── payment.routes.js    # [MỚI] /api/payments/momo/*
 │   │   └── app.js
 │   ├── .env
 │   ├── package.json
@@ -60,7 +65,8 @@ bus-ticket-system/
     │   │   ├── routeApi.js
     │   │   ├── vehicleApi.js
     │   │   ├── userApi.js
-    │   │   └── statsApi.js
+    │   │   ├── statsApi.js
+    │   │   └── paymentApi.js   # [MỚI] Khởi tạo & xác thực thanh toán MoMo
     │   ├── components/
     │   │   ├── common/         # Navbar, Footer, Breadcrumb...
     │   │   ├── ui/             # [shadcn/ui] Button, Input, Table, Badge...
@@ -79,7 +85,8 @@ bus-ticket-system/
     │   │   ├── customer/
     │   │   │   ├── BookTicket.jsx
     │   │   │   ├── InvoiceHistory.jsx
-    │   │   │   └── Profile.jsx
+    │   │   │   ├── Profile.jsx
+    │   │   │   └── PaymentReturn.jsx    # [MỚI] Trang MoMo redirect về sau khi thanh toán
     │   │   ├── staff/
     │   │   │   ├── ManageInvoice.jsx
     │   │   │   ├── Statistics.jsx
@@ -194,7 +201,7 @@ CREATE TABLE invoices (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     user_id         INT NOT NULL,
     total_price     DECIMAL(10, 2) NOT NULL,
-    payment_method  ENUM('cash', 'banking', 'momo') DEFAULT 'cash',
+    payment_method  ENUM('cash', 'momo') DEFAULT 'cash',
     payment_status  ENUM('pending', 'paid', 'refunded') DEFAULT 'pending',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -254,6 +261,15 @@ DB_PASS=yourpassword
 JWT_SECRET=your_jwt_secret_key
 JWT_EXPIRES_IN=7d
 CLIENT_URL=http://localhost:5173
+
+# MoMo Payment Gateway (sandbox) — giá trị mặc định là merchant test công khai của MoMo
+SERVER_URL=http://localhost:8080
+MOMO_PARTNER_CODE=MOMO
+MOMO_ACCESS_KEY=F8BBA842ECF85
+MOMO_SECRET_KEY=K951B6PE1waDMi640xX08PD3vg6EkVlz
+MOMO_ENDPOINT=https://test-payment.momo.vn/v2/gateway/api/create
+MOMO_REDIRECT_URL=http://localhost:5173/payment/momo/return
+MOMO_IPN_URL=http://localhost:8080/api/payments/momo/ipn
 ```
 
 ### API Endpoints
@@ -283,8 +299,17 @@ CLIENT_URL=http://localhost:5173
 |--------|----------|-------|------|
 | POST | `/api/invoices` | Tạo hóa đơn + đặt nhiều vé (Transaction) | Customer/Staff/Admin |
 | GET | `/api/invoices/my` | Lịch sử hóa đơn của tôi | Customer |
+| GET | `/api/invoices/:id` | [MỚI] Chi tiết một hóa đơn | Chủ hóa đơn/Staff/Admin |
 | DELETE | `/api/invoices/:id` | Hủy toàn bộ hóa đơn | Customer/Staff/Admin |
 | DELETE | `/api/tickets/:id` | [MỚI] Hủy từng vé riêng lẻ | Customer/Staff/Admin |
+
+#### 💳 Payments — MoMo Sandbox [MỚI]
+
+| Method | Endpoint | Mô tả | Role |
+|--------|----------|-------|------|
+| POST | `/api/payments/momo/create/:invoiceId` | Khởi tạo thanh toán, trả về `payUrl` MoMo | Chủ hóa đơn/Staff/Admin |
+| POST | `/api/payments/momo/ipn` | Callback server-to-server từ MoMo, đánh dấu hóa đơn `paid` | Public (MoMo gọi) |
+| POST | `/api/payments/momo/verify-return` | Xác thực chữ ký khi trình duyệt được MoMo redirect về | Auth |
 
 #### 👥 Users (Admin)
 
@@ -500,6 +525,7 @@ npm run dev       # Vite dev server
 | Race condition | **Database Transaction** khi tạo invoice + tickets đồng thời |
 | CORS | Chỉ cho phép request từ `CLIENT_URL` trong `.env` |
 | Role guard | `PrivateRoute.jsx` (FE) + `role.js` middleware (BE) |
+| Payment callback forgery | Mọi kết quả thanh toán MoMo (IPN lẫn redirect) đều được xác thực chữ ký HMAC-SHA256 (`momoService.verifySignature`) trước khi cập nhật `payment_status` |
 
 > `role` trong JWT payload dùng để phân quyền. Backend bắt lỗi `SequelizeUniqueConstraintError` trả về thông báo "Ghế đã được đặt" thân thiện cho người dùng.
 
@@ -510,6 +536,7 @@ npm run dev       # Vite dev server
 - **Đặt nhiều ghế:** Một request `POST /api/invoices` nhận mảng `tickets[]`, xử lý trong một DB Transaction duy nhất.
 - **Sơ đồ ghế:** Component `SeatMap.jsx` nhận `totalSeats`, `layout` (từ `vehicles.seat_layout` JSON) và `bookedSeats[]` (từ API `GET /api/trips/:id/booked-seats`).
 - **Framer Motion:** Dùng cho page transition, stagger list trên trang kết quả tìm kiếm, và modal animation.
+- **Thanh toán MoMo (sandbox):** Khi khách chọn phương thức `momo` lúc đặt vé, hóa đơn vẫn được tạo `pending` như bình thường (không đổi transaction đặt vé), sau đó FE gọi `POST /api/payments/momo/create/:invoiceId` để lấy `payUrl` và redirect sang trang thanh toán MoMo test. `orderId` gửi cho MoMo mã hóa sẵn id hóa đơn (`INV{id}-{timestamp}`) nên không cần thêm cột DB để tra ngược. Kết quả được xác nhận qua **cả hai** đường: IPN (`/momo/ipn`, cần domain public/ngrok để chạy được ở local) và xác thực chữ ký ngay tại trang redirect (`/momo/verify-return`, hoạt động được trên `localhost` vì trình duyệt gọi thẳng backend của mình) — cả hai dùng chung logic idempotent để đánh dấu hóa đơn `paid`. Nếu tạo `payUrl` thất bại hoặc thanh toán chưa xong, khách có thể bấm lại nút "Thanh toán MoMo" ở trang Lịch sử hóa đơn.
 - **shadcn/ui components cần cài thêm:**
 
 ```bash
