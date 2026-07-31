@@ -28,9 +28,9 @@ export default function Footer() {
           <div>
             <h4 className="text-sm font-semibold uppercase tracking-wider mb-4">Chính sách</h4>
             <ul className="space-y-2 text-sm text-[hsl(var(--muted-foreground))]">
-              <li><span className="cursor-pointer hover:text-[hsl(var(--primary))] transition-colors">Điều khoản sử dụng</span></li>
-              <li><span className="cursor-pointer hover:text-[hsl(var(--primary))] transition-colors">Chính sách bảo mật</span></li>
-              <li><span className="cursor-pointer hover:text-[hsl(var(--primary))] transition-colors">Quy chế hủy vé</span></li>
+              <li><a href="/terms" className="hover:text-[hsl(var(--primary))] transition-colors">Điều khoản sử dụng</a></li>
+              <li><a href="/privacy-policy" className="hover:text-[hsl(var(--primary))] transition-colors">Chính sách bảo mật</a></li>
+              <li><a href="/cancellation-policy" className="hover:text-[hsl(var(--primary))] transition-colors">Quy chế hủy vé</a></li>
             </ul>
           </div>
 

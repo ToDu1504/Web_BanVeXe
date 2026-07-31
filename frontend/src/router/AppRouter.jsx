@@ -11,6 +11,9 @@ import Home from '@/pages/public/Home'
 import TripDetail from '@/pages/public/TripDetail'
 import Login from '@/pages/auth/Login'
 import Register from '@/pages/auth/Register'
+import Terms from '@/pages/public/Terms'
+import PrivacyPolicy from '@/pages/public/PrivacyPolicy'
+import CancellationPolicy from '@/pages/public/CancellationPolicy'
 
 // Customer Protected Pages
 import BookTicket from '@/pages/customer/BookTicket'
@@ -65,6 +68,30 @@ export default function AppRouter() {
         element={
           <PageLayout>
             <Register />
+          </PageLayout>
+        }
+      />
+      <Route
+        path="/terms"
+        element={
+          <PageLayout>
+            <Terms />
+          </PageLayout>
+        }
+      />
+      <Route
+        path="/privacy-policy"
+        element={
+          <PageLayout>
+            <PrivacyPolicy />
+          </PageLayout>
+        }
+      />
+      <Route
+        path="/cancellation-policy"
+        element={
+          <PageLayout>
+            <CancellationPolicy />
           </PageLayout>
         }
       />

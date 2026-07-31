@@ -87,7 +87,10 @@ bus-ticket-system/
     │   │   │   └── Register.jsx
     │   │   ├── public/
     │   │   │   ├── Home.jsx            # Trang chủ + tìm kiếm
-    │   │   │   └── TripDetail.jsx      # Chi tiết & chọn ghế
+    │   │   │   ├── TripDetail.jsx      # Chi tiết & chọn ghế
+    │   │   │   ├── Terms.jsx           # [MỚI] Điều khoản sử dụng
+    │   │   │   ├── PrivacyPolicy.jsx   # [MỚI] Chính sách bảo mật
+    │   │   │   └── CancellationPolicy.jsx  # [MỚI] Quy chế hủy vé
     │   │   ├── customer/
     │   │   │   ├── BookTicket.jsx
     │   │   │   ├── InvoiceHistory.jsx
