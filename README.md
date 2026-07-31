@@ -37,7 +37,8 @@ bus-ticket-system/
 │   │   │   ├── Ticket.js       # [MỚI] 1 ghế = 1 vé
 │   │   │   ├── Route.js
 │   │   │   ├── Trip.js
-│   │   │   └── Vehicle.js
+│   │   │   ├── Vehicle.js
+│   │   │   └── index.js        # Đăng ký toàn bộ association
 │   │   ├── routes/
 │   │   │   ├── auth.routes.js
 │   │   │   ├── user.routes.js
@@ -48,6 +49,11 @@ bus-ticket-system/
 │   │   │   ├── vehicle.routes.js
 │   │   │   ├── stats.routes.js
 │   │   │   └── payment.routes.js    # [MỚI] /api/payments/momo/*
+│   │   ├── scripts/            # [MỚI] Script chạy tay qua npm run db:*
+│   │   │   ├── syncDb.js       # Đồng bộ Sequelize models → MySQL
+│   │   │   └── seedData.js     # Seed dữ liệu mẫu
+│   │   ├── utils/
+│   │   │   └── joiSchemas.js   # [MỚI] Schema validate cho middlewares/validate.js
 │   │   └── app.js
 │   ├── .env
 │   ├── package.json
@@ -108,7 +114,8 @@ bus-ticket-system/
     │   │   └── PrivateRoute.jsx
     │   ├── hooks/              # [MỚI] Custom hooks
     │   │   ├── useAuth.js
-    │   │   └── useBooking.js
+    │   │   ├── useBooking.js
+    │   │   └── useTheme.js     # [MỚI] Toggle dark/light, lưu localStorage
     │   ├── lib/                # [MỚI] Tiện ích dùng chung
     │   │   └── utils.js        # cn() helper từ shadcn/ui
     │   ├── styles/             # [MỚI] Global styles & CSS Variables
@@ -249,10 +256,19 @@ npm install express mysql2 sequelize dotenv bcryptjs jsonwebtoken cors morgan co
 npm install --save-dev nodemon
 ```
 
+### Scripts
+
+| Lệnh | Mô tả |
+|------|-------|
+| `npm run dev` | `nodemon server.js` — chạy dev server (mặc định port `8080`) |
+| `npm start` | `node server.js` — chạy production |
+| `npm run db:sync` | Đồng bộ Sequelize models → MySQL (`src/scripts/syncDb.js`) |
+| `npm run db:seed` | Seed dữ liệu mẫu (`src/scripts/seedData.js`) |
+
 ### `.env`
 
 ```env
-PORT=5000
+PORT=8080
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=bus_ticket_db
@@ -273,6 +289,12 @@ MOMO_IPN_URL=http://localhost:8080/api/payments/momo/ipn
 ```
 
 ### API Endpoints
+
+#### ❤️ Health
+
+| Method | Endpoint | Mô tả | Role |
+|--------|----------|-------|------|
+| GET | `/api/health` | Kiểm tra server đang chạy | Public |
 
 #### 🔐 Auth
 
@@ -457,7 +479,7 @@ export default defineConfig({
 ### `.env`
 
 ```env
-VITE_API_URL=http://localhost:5000/api
+VITE_API_URL=http://localhost:8080/api
 ```
 
 ### Phân quyền theo Role
@@ -494,7 +516,7 @@ cd frontend
 npm run dev       # Vite dev server
 ```
 
-- Backend: http://localhost:5000  
+- Backend: http://localhost:8080  
 - Frontend: http://localhost:5173
 
 ---
