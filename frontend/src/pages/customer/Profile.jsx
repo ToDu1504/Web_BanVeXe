@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod'
@@ -7,10 +8,11 @@ import { authApi } from '@/api/authApi'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { FormField } from '@/components/ui/form-field'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { User, Lock, Loader2, Save, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
+import { fadeInUp } from '@/lib/motionVariants'
 
 const profileSchema = zod.object({
   fullName: zod.string().min(2, 'Họ tên phải có ít nhất 2 ký tự'),
@@ -93,10 +95,11 @@ export default function Profile() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
-      <h2 className="text-2xl font-extrabold text-[hsl(var(--foreground))] mb-6 flex items-center gap-2">
+      <motion.div initial="hidden" animate="show" variants={fadeInUp}>
+      <h1 className="text-2xl font-semibold tracking-tight text-[hsl(var(--foreground))] mb-6 flex items-center gap-2">
         <User className="h-6 w-6 text-[hsl(var(--primary))]" />
         Cài Đặt Tài Khoản
-      </h2>
+      </h1>
 
       <Tabs defaultValue="profile" className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-md mb-6">
@@ -121,41 +124,32 @@ export default function Profile() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Email (Readonly) */}
-                  <div className="space-y-1.5 md:col-span-2">
-                    <Label htmlFor="email">Địa chỉ Email (Không thể thay đổi)</Label>
-                    <Input id="email" type="email" value={user?.email || ''} disabled className="bg-[hsl(var(--muted))/50]" />
-                  </div>
+                  <FormField label="Địa chỉ Email (Không thể thay đổi)" htmlFor="email" className="md:col-span-2">
+                    <Input id="email" type="email" value={user?.email || ''} disabled className="bg-[hsl(var(--muted)/0.5)]" />
+                  </FormField>
 
                   {/* Full Name */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="fullName">Họ và tên</Label>
+                  <FormField label="Họ và tên" htmlFor="fullName" error={profileErrors.fullName?.message}>
                     <Input
                       id="fullName"
                       placeholder="Nguyễn Văn A"
                       {...registerProfile('fullName')}
-                      className={profileErrors.fullName ? 'border-red-500' : ''}
+                      className={profileErrors.fullName ? 'border-[hsl(var(--destructive))]' : ''}
                     />
-                    {profileErrors.fullName && (
-                      <p className="text-xs text-red-500 font-medium">{profileErrors.fullName.message}</p>
-                    )}
-                  </div>
+                  </FormField>
 
                   {/* Phone Number */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="phone">Số điện thoại</Label>
+                  <FormField label="Số điện thoại" htmlFor="phone" error={profileErrors.phone?.message}>
                     <Input
                       id="phone"
                       placeholder="0987654321"
                       {...registerProfile('phone')}
-                      className={profileErrors.phone ? 'border-red-500' : ''}
+                      className={profileErrors.phone ? 'border-[hsl(var(--destructive))]' : ''}
                     />
-                    {profileErrors.phone && (
-                      <p className="text-xs text-red-500 font-medium">{profileErrors.phone.message}</p>
-                    )}
-                  </div>
+                  </FormField>
                 </div>
               </CardContent>
-              <CardFooter className="justify-end border-t border-[hsl(var(--border))] pt-6 bg-[hsl(var(--muted))/10] rounded-b-xl">
+              <CardFooter className="justify-end border-t border-[hsl(var(--border))] pt-6 bg-[hsl(var(--muted)/0.3)] rounded-b-xl">
                 <Button type="submit" disabled={profileLoading} className="font-semibold">
                   {profileLoading ? (
                     <>
@@ -183,52 +177,37 @@ export default function Profile() {
             </CardHeader>
             <form onSubmit={handleSubmitPassword(onChangePassword)}>
               <CardContent className="space-y-4">
-                {/* Current Password */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="currentPassword">Mật khẩu hiện tại</Label>
+                <FormField label="Mật khẩu hiện tại" htmlFor="currentPassword" error={passwordErrors.currentPassword?.message}>
                   <Input
                     id="currentPassword"
                     type="password"
                     placeholder="••••••••"
                     {...registerPassword('currentPassword')}
-                    className={passwordErrors.currentPassword ? 'border-red-500' : ''}
+                    className={passwordErrors.currentPassword ? 'border-[hsl(var(--destructive))]' : ''}
                   />
-                  {passwordErrors.currentPassword && (
-                    <p className="text-xs text-red-500 font-medium">{passwordErrors.currentPassword.message}</p>
-                  )}
-                </div>
+                </FormField>
 
-                {/* New Password */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="newPassword">Mật khẩu mới</Label>
+                <FormField label="Mật khẩu mới" htmlFor="newPassword" error={passwordErrors.newPassword?.message}>
                   <Input
                     id="newPassword"
                     type="password"
                     placeholder="••••••••"
                     {...registerPassword('newPassword')}
-                    className={passwordErrors.newPassword ? 'border-red-500' : ''}
+                    className={passwordErrors.newPassword ? 'border-[hsl(var(--destructive))]' : ''}
                   />
-                  {passwordErrors.newPassword && (
-                    <p className="text-xs text-red-500 font-medium">{passwordErrors.newPassword.message}</p>
-                  )}
-                </div>
+                </FormField>
 
-                {/* Confirm Password */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="confirmPassword">Xác nhận mật khẩu mới</Label>
+                <FormField label="Xác nhận mật khẩu mới" htmlFor="confirmPassword" error={passwordErrors.confirmPassword?.message}>
                   <Input
                     id="confirmPassword"
                     type="password"
                     placeholder="••••••••"
                     {...registerPassword('confirmPassword')}
-                    className={passwordErrors.confirmPassword ? 'border-red-500' : ''}
+                    className={passwordErrors.confirmPassword ? 'border-[hsl(var(--destructive))]' : ''}
                   />
-                  {passwordErrors.confirmPassword && (
-                    <p className="text-xs text-red-500 font-medium">{passwordErrors.confirmPassword.message}</p>
-                  )}
-                </div>
+                </FormField>
               </CardContent>
-              <CardFooter className="justify-end border-t border-[hsl(var(--border))] pt-6 bg-[hsl(var(--muted))/10] rounded-b-xl">
+              <CardFooter className="justify-end border-t border-[hsl(var(--border))] pt-6 bg-[hsl(var(--muted)/0.3)] rounded-b-xl">
                 <Button type="submit" disabled={passwordLoading} className="font-semibold">
                   {passwordLoading ? (
                     <>
@@ -245,6 +224,7 @@ export default function Profile() {
           </Card>
         </TabsContent>
       </Tabs>
+      </motion.div>
     </div>
   )
 }

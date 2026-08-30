@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod'
@@ -10,11 +11,11 @@ import { paymentApi } from '@/api/paymentApi'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { FormField } from '@/components/ui/form-field'
 import { Bus, MapPin, Calendar, Clock, CreditCard, Banknote, ArrowRight, Loader2 } from 'lucide-react'
 import { formatCurrency, formatDateTime, formatDuration } from '@/lib/utils'
 import { toast } from 'sonner'
+import { staggerContainer, fadeInUp } from '@/lib/motionVariants'
 
 const passengerSchema = zod.object({
   fullName: zod.string().min(2, 'Họ tên hành khách phải có ít nhất 2 ký tự'),
@@ -120,17 +121,22 @@ export default function BookTicket() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
-      <h2 className="text-2xl font-extrabold text-[hsl(var(--foreground))] mb-6 flex items-center gap-2">
+      <h1 className="text-2xl font-semibold tracking-tight text-[hsl(var(--foreground))] mb-6 flex items-center gap-2">
         <Bus className="h-6 w-6 text-[hsl(var(--primary))]" />
         Thông Tin Đặt Vé & Thanh Toán
-      </h2>
+      </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
+
         {/* Left Column: Passenger Info Form */}
-        <div className="lg:col-span-8 space-y-6">
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={fadeInUp}
+          className="lg:col-span-8 space-y-6"
+        >
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            
+
             {/* Passenger Forms */}
             <Card className="border border-[hsl(var(--border))]">
               <CardHeader>
@@ -139,50 +145,55 @@ export default function BookTicket() {
                   Vui lòng cung cấp chính xác thông tin để in lên vé xe.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                {fields.map((field, index) => (
-                  <div key={field.id} className="p-4 border border-[hsl(var(--border))] rounded-lg bg-[hsl(var(--muted))/10] space-y-4">
-                    <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-2">
-                      <span className="font-bold text-sm text-[hsl(var(--primary))]">
-                        Hành khách đi ghế {selectedSeats[index].seatNumber}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Passenger Name */}
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`passengers.${index}.fullName`}>Họ tên hành khách</Label>
-                        <Input
-                          id={`passengers.${index}.fullName`}
-                          placeholder="Nguyễn Văn A"
-                          {...register(`passengers.${index}.fullName`)}
-                          className={errors.passengers?.[index]?.fullName ? 'border-red-500' : ''}
-                        />
-                        {errors.passengers?.[index]?.fullName && (
-                          <p className="text-xs text-red-500 font-medium">
-                            {errors.passengers[index].fullName.message}
-                          </p>
-                        )}
+              <CardContent>
+                <motion.div
+                  initial="hidden"
+                  animate="show"
+                  variants={staggerContainer(0.08)}
+                  className="space-y-6"
+                >
+                  {fields.map((field, index) => (
+                    <motion.div
+                      key={field.id}
+                      variants={fadeInUp}
+                      className="p-4 border border-[hsl(var(--border))] rounded-lg bg-[hsl(var(--muted)/0.3)] space-y-4"
+                    >
+                      <div className="flex items-center justify-between border-b border-[hsl(var(--border))] pb-2">
+                        <span className="font-bold text-sm text-[hsl(var(--primary))]">
+                          Hành khách đi ghế {selectedSeats[index].seatNumber}
+                        </span>
                       </div>
 
-                      {/* Passenger Phone */}
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`passengers.${index}.phone`}>Số điện thoại</Label>
-                        <Input
-                          id={`passengers.${index}.phone`}
-                          placeholder="0987654321"
-                          {...register(`passengers.${index}.phone`)}
-                          className={errors.passengers?.[index]?.phone ? 'border-red-500' : ''}
-                        />
-                        {errors.passengers?.[index]?.phone && (
-                          <p className="text-xs text-red-500 font-medium">
-                            {errors.passengers[index].phone.message}
-                          </p>
-                        )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          label="Họ tên hành khách"
+                          htmlFor={`passengers.${index}.fullName`}
+                          error={errors.passengers?.[index]?.fullName?.message}
+                        >
+                          <Input
+                            id={`passengers.${index}.fullName`}
+                            placeholder="Nguyễn Văn A"
+                            {...register(`passengers.${index}.fullName`)}
+                            className={errors.passengers?.[index]?.fullName ? 'border-[hsl(var(--destructive))]' : ''}
+                          />
+                        </FormField>
+
+                        <FormField
+                          label="Số điện thoại"
+                          htmlFor={`passengers.${index}.phone`}
+                          error={errors.passengers?.[index]?.phone?.message}
+                        >
+                          <Input
+                            id={`passengers.${index}.phone`}
+                            placeholder="0987654321"
+                            {...register(`passengers.${index}.phone`)}
+                            className={errors.passengers?.[index]?.phone ? 'border-[hsl(var(--destructive))]' : ''}
+                          />
+                        </FormField>
                       </div>
-                    </div>
-                  </div>
-                ))}
+                    </motion.div>
+                  ))}
+                </motion.div>
               </CardContent>
             </Card>
 
@@ -197,12 +208,12 @@ export default function BookTicket() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Momo */}
-                  <label className="flex items-center space-x-3 p-4 border border-[hsl(var(--border))] rounded-xl cursor-pointer hover:bg-[hsl(var(--muted))/25] transition-all has-[:checked]:border-[hsl(var(--primary))] has-[:checked]:bg-[hsl(var(--primary))/5]">
+                  <label className="flex items-center space-x-3 p-4 border border-[hsl(var(--border))] rounded-xl cursor-pointer transition-all hover:bg-[hsl(var(--muted)/0.3)] has-checked:border-[hsl(var(--primary))] has-checked:bg-[hsl(var(--primary)/0.05)]">
                     <input
                       type="radio"
                       value="momo"
                       {...register('paymentMethod')}
-                      className="text-[hsl(var(--primary))]"
+                      className="accent-[hsl(var(--primary))]"
                     />
                     <CreditCard className="h-5 w-5 text-pink-500 shrink-0" />
                     <div>
@@ -212,14 +223,14 @@ export default function BookTicket() {
                   </label>
 
                   {/* Cash */}
-                  <label className="flex items-center space-x-3 p-4 border border-[hsl(var(--border))] rounded-xl cursor-pointer hover:bg-[hsl(var(--muted))/25] transition-all has-[:checked]:border-[hsl(var(--primary))] has-[:checked]:bg-[hsl(var(--primary))/5]">
+                  <label className="flex items-center space-x-3 p-4 border border-[hsl(var(--border))] rounded-xl cursor-pointer transition-all hover:bg-[hsl(var(--muted)/0.3)] has-checked:border-[hsl(var(--primary))] has-checked:bg-[hsl(var(--primary)/0.05)]">
                     <input
                       type="radio"
                       value="cash"
                       {...register('paymentMethod')}
-                      className="text-[hsl(var(--primary))]"
+                      className="accent-[hsl(var(--primary))]"
                     />
-                    <Banknote className="h-5 w-5 text-green-500 shrink-0" />
+                    <Banknote className="h-5 w-5 text-[hsl(var(--success))] shrink-0" />
                     <div>
                       <p className="font-semibold text-sm">Tiền mặt</p>
                       <p className="text-xs text-[hsl(var(--muted-foreground))]">Thanh toán trực tiếp tại quầy</p>
@@ -227,12 +238,12 @@ export default function BookTicket() {
                   </label>
                 </div>
               </CardContent>
-              <CardFooter className="bg-[hsl(var(--muted))/20] p-6 border-t border-[hsl(var(--border))] rounded-b-xl flex justify-between items-center">
+              <CardFooter className="bg-[hsl(var(--muted)/0.4)] p-6 border-t border-[hsl(var(--border))] rounded-b-xl flex justify-between items-center">
                 <div className="flex flex-col">
                   <span className="text-xs text-[hsl(var(--muted-foreground))]">Tổng cộng ({selectedSeats.length} vé)</span>
-                  <span className="text-lg font-extrabold text-[hsl(var(--primary))]">{formatCurrency(totalPrice)}</span>
+                  <span className="text-lg font-bold text-[hsl(var(--primary))]">{formatCurrency(totalPrice)}</span>
                 </div>
-                <Button type="submit" variant="accent" className="w-44 font-bold" disabled={submitting}>
+                <Button type="submit" variant="accent" size="lg" className="w-44 font-semibold" disabled={submitting}>
                   {submitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -246,10 +257,16 @@ export default function BookTicket() {
             </Card>
 
           </form>
-        </div>
+        </motion.div>
 
         {/* Right Column: Order Summary Info */}
-        <div className="lg:col-span-4 space-y-6">
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={fadeInUp}
+          transition={{ delay: 0.1 }}
+          className="lg:col-span-4 space-y-6"
+        >
           <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
             <CardHeader>
               <CardTitle className="text-md">Tóm tắt hành trình</CardTitle>
@@ -280,7 +297,7 @@ export default function BookTicket() {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </motion.div>
 
       </div>
     </div>

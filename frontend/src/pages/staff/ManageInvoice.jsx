@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { invoiceApi } from '@/api/invoiceApi'
 import { ticketApi } from '@/api/ticketApi'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
@@ -7,19 +8,36 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Label } from '@/components/ui/label'
 import InvoiceStatus from '@/components/features/InvoiceStatus'
+import TableSkeleton from '@/components/common/TableSkeleton'
+import EmptyState from '@/components/common/EmptyState'
+import { Pagination } from '@/components/ui/pagination'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
-import { Receipt, Search, Edit2, Calendar, User, Eye, Loader2, Trash2, XCircle } from 'lucide-react'
+import { Receipt, Search, Edit2, Eye, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { fadeInUp } from '@/lib/motionVariants'
 
 export default function ManageInvoice() {
   const [invoices, setInvoices] = useState([])
-  const [filteredInvoices, setFilteredInvoices] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
-  
+
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
 
   // Edit status Dialog state
@@ -32,14 +50,22 @@ export default function ManageInvoice() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [activeInvoice, setActiveInvoice] = useState(null)
 
+  // Gõ tới đâu tìm tới đó nhưng chỉ gọi API sau khi ngừng gõ 400ms.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 400)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, statusFilter])
+
   const fetchInvoices = async () => {
     try {
       setLoading(true)
-      const data = await invoiceApi.getAll()
-      // Sort newest first
-      const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      setInvoices(sorted)
-      setFilteredInvoices(sorted)
+      const res = await invoiceApi.getAll({ page, limit: 10, search: debouncedSearch || undefined, status: statusFilter })
+      setInvoices(res.data)
+      setPagination(res.pagination)
     } catch (error) {
       toast.error('Không thể tải danh sách hóa đơn hệ thống')
     } finally {
@@ -49,36 +75,7 @@ export default function ManageInvoice() {
 
   useEffect(() => {
     fetchInvoices()
-  }, [])
-
-  // Handle live search and status filter updates
-  useEffect(() => {
-    let result = invoices
-
-    // Search query matches invoice ID, user details or passenger details
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase()
-      result = result.filter(
-        (inv) =>
-          inv.id.toString().includes(q) ||
-          inv.User?.full_name?.toLowerCase().includes(q) ||
-          inv.User?.email?.toLowerCase().includes(q) ||
-          inv.User?.phone?.includes(q) ||
-          inv.Tickets?.some(
-            (t) =>
-              t.passenger_name?.toLowerCase().includes(q) ||
-              t.passenger_phone?.includes(q)
-          )
-      )
-    }
-
-    // Status filter matches
-    if (statusFilter !== 'all') {
-      result = result.filter((inv) => inv.payment_status === statusFilter)
-    }
-
-    setFilteredInvoices(result)
-  }, [searchQuery, statusFilter, invoices])
+  }, [page, debouncedSearch, statusFilter])
 
   const handleOpenStatusEdit = (invoice) => {
     setSelectedInvoice(invoice)
@@ -103,7 +100,6 @@ export default function ManageInvoice() {
   }
 
   const handleCancelInvoice = async (id) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn hủy toàn bộ hóa đơn HD-${id}? Tất cả vé đi kèm sẽ được hoàn/hủy.`)) return
     try {
       await invoiceApi.cancelInvoice(id)
       toast.success(`Hủy toàn bộ hóa đơn HD-${id} thành công!`)
@@ -114,18 +110,17 @@ export default function ManageInvoice() {
   }
 
   const handleCancelTicket = async (ticketId) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn hủy vé số #${ticketId}?`)) return
     try {
       await ticketApi.cancelTicket(ticketId)
       toast.success(`Hủy vé #${ticketId} thành công!`)
-      
-      // Refresh list
-      const data = await invoiceApi.getAll()
-      const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      setInvoices(sorted)
+
+      // Refresh current page
+      const res = await invoiceApi.getAll({ page, limit: 10, search: debouncedSearch || undefined, status: statusFilter })
+      setInvoices(res.data)
+      setPagination(res.pagination)
 
       // Refresh active dialog invoice details
-      const nextActive = sorted.find((inv) => inv.id === activeInvoice.id)
+      const nextActive = res.data.find((inv) => inv.id === activeInvoice.id)
       if (nextActive) {
         setActiveInvoice(nextActive)
       } else {
@@ -147,11 +142,11 @@ export default function ManageInvoice() {
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div initial="hidden" animate="show" variants={fadeInUp} className="space-y-6">
       <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <CardHeader>
-          <CardTitle className="text-xl font-bold flex items-center gap-2 text-[hsl(var(--primary))]">
-            <Receipt className="h-5 w-5" />
+          <CardTitle className="text-xl font-semibold tracking-tight flex items-center gap-2">
+            <Receipt className="h-5 w-5 text-[hsl(var(--primary))]" />
             Quản Lý Hóa Đơn Khách Hàng
           </CardTitle>
           <CardDescription>
@@ -159,7 +154,7 @@ export default function ManageInvoice() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          
+
           {/* Search and Filters Bar */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative w-full md:w-96">
@@ -190,18 +185,14 @@ export default function ManageInvoice() {
 
           {/* Invoices List Table */}
           {loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <div className="flex flex-col items-center space-y-4">
-                <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
-                <p className="text-sm text-[hsl(var(--muted-foreground))]">Đang tải danh sách hóa đơn...</p>
-              </div>
-            </div>
-          ) : filteredInvoices.length > 0 ? (
+            <TableSkeleton rows={5} columns={7} />
+          ) : invoices.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Mã HĐ</TableHead>
                   <TableHead>Khách hàng</TableHead>
+                  <TableHead>Tuyến - Chuyến</TableHead>
                   <TableHead>Ngày tạo</TableHead>
                   <TableHead>Phương thức</TableHead>
                   <TableHead>Trạng thái</TableHead>
@@ -210,14 +201,26 @@ export default function ManageInvoice() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredInvoices.map((invoice) => (
-                  <TableRow key={invoice.id}>
+                {invoices.map((invoice) => {
+                  const firstTrip = invoice.Tickets?.[0]?.Trip
+                  return (
+                  <TableRow key={invoice.id} className={invoice.payment_status === 'refunded' ? 'opacity-60' : ''}>
                     <TableCell className="font-bold">HD-{invoice.id}</TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="font-semibold text-xs">{invoice.User?.full_name}</span>
                         <span className="text-[10px] text-[hsl(var(--muted-foreground))]">{invoice.User?.email} • {invoice.User?.phone}</span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {firstTrip ? (
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium">{firstTrip.Route?.origin} → {firstTrip.Route?.destination}</span>
+                          <span className="text-[10px] text-[hsl(var(--muted-foreground))]">{formatDateTime(firstTrip.departure_time)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-[hsl(var(--muted-foreground))]">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs">{formatDateTime(invoice.created_at)}</TableCell>
                     <TableCell className="text-xs">{paymentMethodLabels[invoice.payment_method] || invoice.payment_method}</TableCell>
@@ -233,7 +236,7 @@ export default function ManageInvoice() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleOpenDetails(invoice)}
-                          className="h-8 w-8 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                          className="h-8 w-8"
                           title="Xem chi tiết"
                         >
                           <Eye className="h-4 w-4" />
@@ -242,33 +245,50 @@ export default function ManageInvoice() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleOpenStatusEdit(invoice)}
-                          className="h-8 w-8 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                          className="h-8 w-8"
                           title="Cập nhật trạng thái"
                         >
                           <Edit2 className="h-4 w-4" />
                         </Button>
                         {invoice.payment_status !== 'refunded' && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleCancelInvoice(invoice.id)}
-                            className="h-8 w-8 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                            title="Hủy hóa đơn thay khách"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)]"
+                                title="Hủy hóa đơn thay khách"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Hủy hóa đơn HD-{invoice.id}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Tất cả vé đi kèm trong hóa đơn này sẽ được hủy và ghế sẽ được hoàn trả lại. Hành động này không thể hoàn tác.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Đóng</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleCancelInvoice(invoice.id)}>
+                                  Xác nhận hủy
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">
-              Không tìm thấy hóa đơn nào phù hợp với bộ lọc.
-            </div>
+            <EmptyState icon={Receipt} title="Không tìm thấy hóa đơn nào phù hợp với bộ lọc." />
           )}
+          <Pagination pagination={pagination} onPageChange={setPage} />
         </CardContent>
       </Card>
 
@@ -326,7 +346,7 @@ export default function ManageInvoice() {
               </DialogHeader>
 
               <div className="space-y-4 my-2 text-sm">
-                <div className="grid grid-cols-2 gap-2 text-xs border border-[hsl(var(--border))] rounded-xl p-3 bg-[hsl(var(--muted))/10]">
+                <div className="grid grid-cols-2 gap-2 text-xs border border-[hsl(var(--border))] rounded-xl p-3 bg-[hsl(var(--muted)/0.3)]">
                   <p><strong>Tên tài khoản:</strong> {activeInvoice.User?.full_name}</p>
                   <p><strong>Số điện thoại:</strong> {activeInvoice.User?.phone}</p>
                   <p><strong>Email đăng ký:</strong> {activeInvoice.User?.email}</p>
@@ -342,17 +362,34 @@ export default function ManageInvoice() {
                           <div className="flex justify-between items-center font-bold text-xs">
                             <span>Vé #{t.id} - Ghế số {t.seat_number}</span>
                             <div className="flex items-center gap-2">
-                              <span className={t.booking_status === 'booked' ? 'text-green-600' : 'text-red-500'}>
+                              <span className={t.booking_status === 'booked' ? 'text-[hsl(var(--success))]' : 'text-[hsl(var(--destructive))]'}>
                                 {t.booking_status === 'booked' ? 'Đã đặt' : 'Đã hủy'}
                               </span>
                               {t.booking_status === 'booked' && (
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => handleCancelTicket(t.id)}
-                                  className="h-6 px-2 text-[10px] text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 border border-red-200/50 rounded"
-                                >
-                                  Hủy vé
-                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      className="h-6 px-2 text-[10px] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)] border border-[hsl(var(--destructive)/0.3)] rounded"
+                                    >
+                                      Hủy vé
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Hủy vé #{t.id}?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Ghế số {t.seat_number} sẽ được hoàn trả lại cho chuyến xe. Hành động này không thể hoàn tác.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Đóng</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleCancelTicket(t.id)}>
+                                        Xác nhận hủy
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               )}
                             </div>
                           </div>
@@ -374,6 +411,6 @@ export default function ManageInvoice() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </motion.div>
   )
 }

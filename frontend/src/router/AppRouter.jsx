@@ -1,5 +1,6 @@
 import React from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
+import { AnimatePresence } from 'framer-motion'
 import PrivateRoute from './PrivateRoute'
 
 // Layouts
@@ -33,11 +34,15 @@ import Dashboard from '@/pages/admin/Dashboard'
 import ManageUsers from '@/pages/admin/ManageUsers'
 import ManageRoutes from '@/pages/admin/ManageRoutes'
 import ManageTrips from '@/pages/admin/ManageTrips'
+import ManageTripTemplates from '@/pages/admin/ManageTripTemplates'
 import ManageVehicles from '@/pages/admin/ManageVehicles'
 
 export default function AppRouter() {
+  const location = useLocation()
+
   return (
-    <Routes>
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
       {/* Public Routes with PageLayout */}
       <Route
         path="/"
@@ -100,7 +105,7 @@ export default function AppRouter() {
       <Route
         path="/customer/book"
         element={
-          <PrivateRoute allowedRoles={['customer', 'staff']}>
+          <PrivateRoute allowedRoles={['customer', 'staff', 'admin']}>
             <PageLayout>
               <BookTicket />
             </PageLayout>
@@ -241,9 +246,20 @@ export default function AppRouter() {
           </PrivateRoute>
         }
       />
+      <Route
+        path="/admin/trip-templates"
+        element={
+          <PrivateRoute allowedRoles={['admin']}>
+            <AdminLayout>
+              <ManageTripTemplates />
+            </AdminLayout>
+          </PrivateRoute>
+        }
+      />
 
       {/* Fallback to Home */}
       <Route path="*" element={<Home />} />
-    </Routes>
+      </Routes>
+    </AnimatePresence>
   )
 }

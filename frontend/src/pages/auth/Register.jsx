@@ -6,10 +6,11 @@ import * as zod from 'zod'
 import { authApi } from '@/api/authApi'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { FormField } from '@/components/ui/form-field'
+import { CardContent, CardFooter } from '@/components/ui/card'
+import AuthLayout from '@/components/common/AuthLayout'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, User, Mail, Phone, Lock, Eye, EyeOff } from 'lucide-react'
 
 const registerSchema = zod.object({
   fullName: zod.string().min(2, 'Họ tên phải có ít nhất 2 ký tự'),
@@ -25,6 +26,8 @@ const registerSchema = zod.object({
 export default function Register() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const {
     register,
@@ -55,111 +58,112 @@ export default function Register() {
   }
 
   return (
-    <div className="container mx-auto flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-8">
-      <Card className="w-full max-w-md border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Đăng ký tài khoản</CardTitle>
-          <CardDescription className="text-center">
-            Tạo tài khoản để đặt và quản lý vé xe dễ dàng
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="space-y-4">
-            {/* Full Name */}
-            <div className="space-y-1.5">
-              <Label htmlFor="fullName">Họ và tên</Label>
+    <AuthLayout
+      title="Đăng ký tài khoản"
+      description="Tạo tài khoản để đặt và quản lý vé xe dễ dàng"
+      footer={
+        <>
+          Đã có tài khoản?{' '}
+          <Link to="/login" className="font-semibold text-[hsl(var(--foreground))] hover:underline">
+            Đăng nhập ngay
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <CardContent className="space-y-4">
+          <FormField label="Họ và tên" htmlFor="fullName" error={errors.fullName?.message}>
+            <div className="relative">
+              <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
               <Input
                 id="fullName"
                 type="text"
                 placeholder="Nguyễn Văn A"
                 {...register('fullName')}
-                className={errors.fullName ? 'border-red-500' : ''}
+                className={`pl-9 ${errors.fullName ? 'border-[hsl(var(--destructive))]' : ''}`}
               />
-              {errors.fullName && (
-                <p className="text-xs text-red-500 font-medium">{errors.fullName.message}</p>
-              )}
             </div>
+          </FormField>
 
-            {/* Email */}
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
+          <FormField label="Email" htmlFor="email" error={errors.email?.message}>
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
               <Input
                 id="email"
                 type="email"
                 placeholder="example@domain.com"
                 {...register('email')}
-                className={errors.email ? 'border-red-500' : ''}
+                className={`pl-9 ${errors.email ? 'border-[hsl(var(--destructive))]' : ''}`}
               />
-              {errors.email && (
-                <p className="text-xs text-red-500 font-medium">{errors.email.message}</p>
-              )}
             </div>
+          </FormField>
 
-            {/* Phone */}
-            <div className="space-y-1.5">
-              <Label htmlFor="phone">Số điện thoại</Label>
+          <FormField label="Số điện thoại" htmlFor="phone" error={errors.phone?.message}>
+            <div className="relative">
+              <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
               <Input
                 id="phone"
                 type="text"
                 placeholder="0987654321"
                 {...register('phone')}
-                className={errors.phone ? 'border-red-500' : ''}
+                className={`pl-9 ${errors.phone ? 'border-[hsl(var(--destructive))]' : ''}`}
               />
-              {errors.phone && (
-                <p className="text-xs text-red-500 font-medium">{errors.phone.message}</p>
-              )}
             </div>
+          </FormField>
 
-            {/* Password */}
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Mật khẩu</Label>
+          <FormField label="Mật khẩu" htmlFor="password" error={errors.password?.message}>
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
               <Input
                 id="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 {...register('password')}
-                className={errors.password ? 'border-red-500' : ''}
+                className={`pl-9 pr-10 ${errors.password ? 'border-[hsl(var(--destructive))]' : ''}`}
               />
-              {errors.password && (
-                <p className="text-xs text-red-500 font-medium">{errors.password.message}</p>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
+          </FormField>
 
-            {/* Confirm Password */}
-            <div className="space-y-1.5">
-              <Label htmlFor="confirmPassword">Xác nhận mật khẩu</Label>
+          <FormField label="Xác nhận mật khẩu" htmlFor="confirmPassword" error={errors.confirmPassword?.message}>
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
               <Input
                 id="confirmPassword"
-                type="password"
+                type={showConfirmPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 {...register('confirmPassword')}
-                className={errors.confirmPassword ? 'border-red-500' : ''}
+                className={`pl-9 pr-10 ${errors.confirmPassword ? 'border-[hsl(var(--destructive))]' : ''}`}
               />
-              {errors.confirmPassword && (
-                <p className="text-xs text-red-500 font-medium">{errors.confirmPassword.message}</p>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full font-semibold" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Đang tạo tài khoản...
-                </>
-              ) : (
-                'Đăng ký'
-              )}
-            </Button>
-            <div className="text-sm text-center text-[hsl(var(--muted-foreground))]">
-              Đã có tài khoản?{' '}
-              <Link to="/login" className="text-[hsl(var(--primary))] font-semibold hover:underline">
-                Đăng nhập ngay
-              </Link>
-            </div>
-          </CardFooter>
-        </form>
-      </Card>
-    </div>
+          </FormField>
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" className="w-full font-semibold" size="lg" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Đang tạo tài khoản...
+              </>
+            ) : (
+              'Đăng ký'
+            )}
+          </Button>
+        </CardFooter>
+      </form>
+    </AuthLayout>
   )
 }

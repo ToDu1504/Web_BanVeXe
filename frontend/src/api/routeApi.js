@@ -1,8 +1,8 @@
 import axiosInstance from './axiosInstance'
 
 export const routeApi = {
-  getAll: async () => {
-    const response = await axiosInstance.get('/routes')
+  getAll: async (params) => {
+    const response = await axiosInstance.get('/routes', { params })
     return response.data
   },
   getById: async (id) => {

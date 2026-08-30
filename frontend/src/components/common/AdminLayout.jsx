@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
 import { Button } from '@/components/ui/button'
@@ -19,9 +20,71 @@ import {
   ChevronRight,
   Menu,
   Ticket,
+  Repeat,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { authApi } from '@/api/authApi'
+import logoIcon from '@/assets/logo-icon.png'
+
+// Danh sách menu item cho sidebar — chia sẻ chung giữa desktop và mobile drawer.
+function SidebarNav({ items, activePath, collapsed, onNavigate }) {
+  return (
+    <nav className="flex-1 space-y-1 p-2 overflow-y-auto">
+      {items.map((item) => {
+        const Icon = item.icon
+        const isActive = activePath === item.path
+        return (
+          <Link
+            key={item.path}
+            to={item.path}
+            onClick={onNavigate}
+            className={`flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isActive
+                ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
+                : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]'
+            }`}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            {!collapsed && <span className="truncate">{item.title}</span>}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
+
+// Khối theme-toggle + đăng xuất — dùng chung cho cả sidebar desktop và mobile drawer.
+function SidebarFooterActions({ theme, toggleTheme, onLogout, collapsed }) {
+  return (
+    <>
+      <Button
+        variant="ghost"
+        onClick={toggleTheme}
+        className="w-full justify-start text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]"
+      >
+        {theme === 'dark' ? (
+          <>
+            <Sun className="h-4 w-4 mr-2" />
+            {!collapsed && <span>Giao diện sáng</span>}
+          </>
+        ) : (
+          <>
+            <Moon className="h-4 w-4 mr-2" />
+            {!collapsed && <span>Giao diện tối</span>}
+          </>
+        )}
+      </Button>
+      <Button
+        variant="ghost"
+        onClick={onLogout}
+        className="w-full justify-start text-[hsl(var(--destructive))] hover:text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)]"
+      >
+        <LogOut className="h-4 w-4 mr-2" />
+        {!collapsed && <span>Đăng xuất</span>}
+      </Button>
+    </>
+  )
+}
 
 export default function AdminLayout({ children }) {
   const { user, logoutUser } = useAuth()
@@ -62,6 +125,12 @@ export default function AdminLayout({ children }) {
       roles: ['admin'],
     },
     {
+      title: 'Mẫu chuyến lặp lại',
+      path: '/admin/trip-templates',
+      icon: Repeat,
+      roles: ['admin'],
+    },
+    {
       title: 'Quản lý Phương tiện',
       path: '/admin/vehicles',
       icon: BusIcon,
@@ -83,7 +152,7 @@ export default function AdminLayout({ children }) {
       title: 'Đặt vé hộ khách',
       path: '/',
       icon: Ticket,
-      roles: ['staff'],
+      roles: ['staff', 'admin'],
     },
     {
       title: 'Xem chuyến xe',
@@ -124,14 +193,14 @@ export default function AdminLayout({ children }) {
         {/* Brand */}
         <div className="flex h-16 items-center justify-between px-4 border-b border-[hsl(var(--border))]">
           {!isCollapsed && (
-            <Link to="/" className="flex items-center space-x-2 text-[hsl(var(--primary))] font-bold text-lg">
-              <BusIcon className="h-5 w-5 stroke-[2.5]" />
+            <Link to="/" className="flex items-center space-x-2 text-[hsl(var(--foreground))] font-bold text-lg">
+              <img src={logoIcon} alt="" className="h-6 w-auto" />
               <span>Đặt Vé Xe Khách Admin</span>
             </Link>
           )}
           {isCollapsed && (
-            <Link to="/" className="mx-auto text-[hsl(var(--primary))] font-bold">
-              <BusIcon className="h-5 w-5 stroke-[2.5]" />
+            <Link to="/" className="mx-auto">
+              <img src={logoIcon} alt="Đặt Vé Xe Khách Admin" className="h-6 w-auto" />
             </Link>
           )}
           <Button
@@ -146,8 +215,8 @@ export default function AdminLayout({ children }) {
 
         {/* User profile brief */}
         <div className="p-4 border-b border-[hsl(var(--border))] flex items-center space-x-3">
-          <Avatar className="h-9 w-9 bg-[hsl(var(--primary))] text-white">
-            <AvatarFallback className="bg-[hsl(var(--primary))] text-white font-bold">
+          <Avatar className="h-9 w-9">
+            <AvatarFallback className="bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-bold">
               {user?.full_name?.charAt(0).toUpperCase() || 'A'}
             </AvatarFallback>
           </Avatar>
@@ -159,55 +228,16 @@ export default function AdminLayout({ children }) {
           )}
         </div>
 
-        {/* Menu Items */}
-        <nav className="flex-1 space-y-1 p-2 overflow-y-auto">
-          {menuItems.map((item) => {
-            const Icon = item.icon
-            const isActive = location.pathname === item.path
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
-                    : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]'
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {!isCollapsed && <span className="truncate">{item.title}</span>}
-              </Link>
-            )
-          })}
-        </nav>
+        <SidebarNav items={menuItems} activePath={location.pathname} collapsed={isCollapsed} />
 
         {/* Footer actions */}
         <div className="p-2 border-t border-[hsl(var(--border))] space-y-1">
-          <Button
-            variant="ghost"
-            onClick={toggleTheme}
-            className="w-full justify-start text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]"
-          >
-            {theme === 'dark' ? (
-              <>
-                <Sun className="h-4 w-4 mr-2" />
-                {!isCollapsed && <span>Giao diện sáng</span>}
-              </>
-            ) : (
-              <>
-                <Moon className="h-4 w-4 mr-2" />
-                {!isCollapsed && <span>Giao diện tối</span>}
-              </>
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={handleLogout}
-            className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            {!isCollapsed && <span>Đăng xuất</span>}
-          </Button>
+          <SidebarFooterActions
+            theme={theme}
+            toggleTheme={toggleTheme}
+            onLogout={handleLogout}
+            collapsed={isCollapsed}
+          />
         </div>
       </aside>
 
@@ -229,7 +259,7 @@ export default function AdminLayout({ children }) {
             </h1>
           </div>
           <div className="flex items-center space-x-4">
-            <Link to="/" className="text-xs md:text-sm font-medium hover:text-[hsl(var(--primary))] transition-colors">
+            <Link to="/" className="text-xs md:text-sm font-medium hover:text-[hsl(var(--accent))] transition-colors">
               Xem trang chủ
             </Link>
           </div>
@@ -242,69 +272,50 @@ export default function AdminLayout({ children }) {
       </div>
 
       {/* Mobile Drawer (Menu) overlay */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm md:hidden"
-          onClick={() => setIsMobileOpen(false)}
-        >
-          <div
-            className="w-64 h-full bg-[hsl(var(--card))] border-r border-[hsl(var(--border))] flex flex-col p-4 space-y-4"
-            onClick={(e) => e.stopPropagation()}
+      <AnimatePresence>
+        {isMobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm md:hidden"
+            onClick={() => setIsMobileOpen(false)}
           >
-            <div className="flex h-10 items-center justify-between border-b border-[hsl(var(--border))] pb-2">
-              <span className="font-bold text-[hsl(var(--primary))] flex items-center gap-2">
-                <BusIcon className="h-5 w-5" />
-                Đặt Vé Xe Khách Admin
-              </span>
-            </div>
-            <nav className="flex-1 space-y-2">
-              {menuItems.map((item) => {
-                const Icon = item.icon
-                const isActive = location.pathname === item.path
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setIsMobileOpen(false)}
-                    className={`flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
-                        : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span>{item.title}</span>
-                  </Link>
-                )
-              })}
-            </nav>
-            <div className="border-t border-[hsl(var(--border))] pt-4 space-y-2">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  toggleTheme()
-                  setIsMobileOpen(false)
-                }}
-                className="w-full justify-start text-[hsl(var(--muted-foreground))]"
-              >
-                {theme === 'dark' ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
-                Toggle Theme
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  handleLogout()
-                  setIsMobileOpen(false)
-                }}
-                className="w-full justify-start text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Đăng xuất
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
+              className="w-64 h-full bg-[hsl(var(--card))] border-r border-[hsl(var(--border))] flex flex-col p-4 space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex h-10 items-center justify-between border-b border-[hsl(var(--border))] pb-2">
+                <span className="font-bold text-[hsl(var(--foreground))] flex items-center gap-2">
+                  <img src={logoIcon} alt="" className="h-5 w-auto" />
+                  Đặt Vé Xe Khách Admin
+                </span>
+              </div>
+              <SidebarNav
+                items={menuItems}
+                activePath={location.pathname}
+                collapsed={false}
+                onNavigate={() => setIsMobileOpen(false)}
+              />
+              <div className="border-t border-[hsl(var(--border))] pt-4 space-y-2">
+                <SidebarFooterActions
+                  theme={theme}
+                  toggleTheme={toggleTheme}
+                  onLogout={() => {
+                    handleLogout()
+                    setIsMobileOpen(false)
+                  }}
+                  collapsed={false}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

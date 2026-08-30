@@ -1,15 +1,33 @@
-const { Vehicle } = require('../models')
+const { Op } = require('sequelize')
+const { Vehicle, Trip } = require('../models')
+const { getPagination, buildPaginationMeta } = require('../utils/pagination')
 
 const vehicleController = {
-  // @desc    Get all vehicles
-  // @route   GET /api/vehicles
+  // @desc    Get all vehicles — paginated when `page` is provided, otherwise
+  //          the full list (used by Route/Vehicle dropdowns elsewhere).
+  // @route   GET /api/vehicles?page=&limit=&search=
   // @access  Private/Staff/Admin
   getAll: async (req, res) => {
     try {
-      const vehicles = await Vehicle.findAll({
-        order: [['license_plate', 'ASC']],
-      })
-      return res.status(200).json(vehicles)
+      const { search } = req.query
+      const where = search
+        ? {
+            [Op.or]: [
+              { license_plate: { [Op.like]: `%${search}%` } },
+              { vehicle_type: { [Op.like]: `%${search}%` } },
+            ],
+          }
+        : {}
+      const order = [['license_plate', 'ASC']]
+
+      if (!req.query.page) {
+        const vehicles = await Vehicle.findAll({ where, order })
+        return res.status(200).json(vehicles)
+      }
+
+      const { page, limit, offset } = getPagination(req.query)
+      const { rows, count } = await Vehicle.findAndCountAll({ where, order, limit, offset })
+      return res.status(200).json({ data: rows, pagination: buildPaginationMeta(page, limit, count) })
     } catch (error) {
       console.error('Lỗi vehicle getAll:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi lấy danh sách phương tiện.' })
@@ -71,6 +89,23 @@ const vehicleController = {
         return res.status(404).json({ message: 'Không tìm thấy xe.' })
       }
 
+      // Changing capacity/layout while trips are scheduled/running on this
+      // vehicle can invalidate already-sold seat numbers (a ticket could end
+      // up pointing at a seat that no longer exists in the new layout).
+      const isChangingCapacity = total_seats !== undefined && Number(total_seats) !== vehicle.total_seats
+      const isChangingLayout = seat_layout !== undefined && JSON.stringify(seat_layout) !== JSON.stringify(vehicle.seat_layout)
+
+      if (isChangingCapacity || isChangingLayout) {
+        const activeTripCount = await Trip.count({
+          where: { vehicle_id: vehicle.id, status: { [Op.in]: ['scheduled', 'ongoing'] } },
+        })
+        if (activeTripCount > 0) {
+          return res.status(400).json({
+            message: 'Không thể thay đổi tổng số ghế/sơ đồ ghế khi phương tiện đang có chuyến xe lên lịch hoặc đang chạy. Hãy hủy hoặc chờ hoàn thành các chuyến trước.',
+          })
+        }
+      }
+
       // Check plate uniqueness if changing
       if (license_plate && license_plate !== vehicle.license_plate) {
         const exists = await Vehicle.findOne({ where: { license_plate } })
@@ -101,6 +136,16 @@ const vehicleController = {
       const vehicle = await Vehicle.findByPk(req.params.id)
       if (!vehicle) {
         return res.status(404).json({ message: 'Không tìm thấy xe.' })
+      }
+
+      // Block deletion when trips exist for this vehicle — cascading the
+      // delete would silently wipe Trip rows (and any Tickets/Invoices sold
+      // against them). Deactivate the vehicle (is_active: false) instead.
+      const tripCount = await Trip.count({ where: { vehicle_id: vehicle.id } })
+      if (tripCount > 0) {
+        return res.status(400).json({
+          message: 'Không thể xóa phương tiện đã có chuyến xe được lập lịch. Hãy vô hiệu hóa phương tiện thay vì xóa.',
+        })
       }
 
       await vehicle.destroy()

@@ -1,9 +1,9 @@
 import axiosInstance from './axiosInstance'
 
 export const tripApi = {
-  search: async ({ origin, destination, date, passengers }) => {
+  search: async ({ origin, destination, date, passengers, page, limit }) => {
     const response = await axiosInstance.get('/trips/search', {
-      params: { origin, destination, date, passengers },
+      params: { origin, destination, date, passengers, page, limit },
     })
     return response.data
   },
@@ -16,8 +16,8 @@ export const tripApi = {
     return response.data
   },
   // Admin endpoints
-  getAll: async () => {
-    const response = await axiosInstance.get('/trips')
+  getAll: async (params) => {
+    const response = await axiosInstance.get('/trips', { params })
     return response.data
   },
   create: async (tripData) => {

@@ -1,17 +1,34 @@
 import React, { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { routeApi } from '@/api/routeApi'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { FormField } from '@/components/ui/form-field'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import PageHeader from '@/components/common/PageHeader'
+import TableSkeleton from '@/components/common/TableSkeleton'
+import EmptyState from '@/components/common/EmptyState'
+import { Pagination } from '@/components/ui/pagination'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod'
 import { Search, Plus, Edit2, Trash2, Route as RouteIcon, Loader2, ArrowRight } from 'lucide-react'
 import { formatCurrency, formatDuration } from '@/lib/utils'
 import { toast } from 'sonner'
+import { fadeInUp } from '@/lib/motionVariants'
 
 const routeSchema = zod.object({
   origin: zod.string().min(2, 'Điểm đi phải có ít nhất 2 ký tự'),
@@ -23,9 +40,11 @@ const routeSchema = zod.object({
 
 export default function ManageRoutes() {
   const [routes, setRoutes] = useState([])
-  const [filteredRoutes, setFilteredRoutes] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   // Dialog State
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -35,7 +54,6 @@ export default function ManageRoutes() {
   const {
     register,
     handleSubmit,
-    setValue,
     reset,
     formState: { errors },
   } = useForm({
@@ -43,12 +61,25 @@ export default function ManageRoutes() {
     defaultValues: { origin: '', destination: '', distance_km: 0, duration_min: 0, base_price: 0 },
   })
 
+  // Gõ tới đâu tìm tới đó nhưng chỉ gọi API sau khi ngừng gõ 400ms, tránh
+  // bắn 1 request mỗi phím bấm (tìm kiếm giờ chạy ở backend, không còn lọc
+  // trên toàn bộ dữ liệu đã tải như trước).
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 400)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  // Đổi từ khóa tìm kiếm thì quay về trang 1
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch])
+
   const fetchRoutes = async () => {
     try {
       setLoading(true)
-      const data = await routeApi.getAll()
-      setRoutes(data)
-      setFilteredRoutes(data)
+      const res = await routeApi.getAll({ page, limit: 10, search: debouncedSearch || undefined })
+      setRoutes(res.data)
+      setPagination(res.pagination)
     } catch (error) {
       toast.error('Không thể tải danh sách tuyến đường')
     } finally {
@@ -58,18 +89,7 @@ export default function ManageRoutes() {
 
   useEffect(() => {
     fetchRoutes()
-  }, [])
-
-  // Filter routes on search
-  useEffect(() => {
-    const q = searchQuery.toLowerCase()
-    const result = routes.filter(
-      (r) =>
-        r.origin.toLowerCase().includes(q) ||
-        r.destination.toLowerCase().includes(q)
-    )
-    setFilteredRoutes(result)
-  }, [searchQuery, routes])
+  }, [page, debouncedSearch])
 
   const handleOpenAdd = () => {
     setEditingRoute(null)
@@ -90,8 +110,6 @@ export default function ManageRoutes() {
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa tuyến đường này?')) return
-
     try {
       await routeApi.delete(id)
       toast.success('Xóa tuyến đường thành công!')
@@ -121,18 +139,17 @@ export default function ManageRoutes() {
   }
 
   return (
-    <div className="space-y-6">
-      
-      {/* Header Widget */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Quản Lý Tuyến Đường Vận Chuyển</h2>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">Xem, thêm mới, điều chỉnh thông tin các tuyến đường xe chạy.</p>
-        </div>
-        <Button onClick={handleOpenAdd} className="font-semibold h-10 shrink-0">
-          <Plus className="h-4.5 w-4.5 mr-1.5" /> Thêm Tuyến Đường
-        </Button>
-      </div>
+    <motion.div initial="hidden" animate="show" variants={fadeInUp} className="space-y-6">
+
+      <PageHeader
+        title="Quản Lý Tuyến Đường Vận Chuyển"
+        description="Xem, thêm mới, điều chỉnh thông tin các tuyến đường xe chạy."
+        action={
+          <Button onClick={handleOpenAdd} className="font-semibold h-10 shrink-0">
+            <Plus className="h-4.5 w-4.5 mr-1.5" /> Thêm Tuyến Đường
+          </Button>
+        }
+      />
 
       <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm">
         <CardHeader className="pb-4">
@@ -148,10 +165,8 @@ export default function ManageRoutes() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
-            </div>
-          ) : filteredRoutes.length > 0 ? (
+            <TableSkeleton rows={5} columns={8} />
+          ) : routes.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -166,7 +181,7 @@ export default function ManageRoutes() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRoutes.map((route) => (
+                {routes.map((route) => (
                   <TableRow key={route.id}>
                     <TableCell className="font-bold text-xs">R-{route.id}</TableCell>
                     <TableCell className="font-semibold text-xs">{route.origin}</TableCell>
@@ -183,18 +198,35 @@ export default function ManageRoutes() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleOpenEdit(route)}
-                          className="h-8 w-8 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                          className="h-8 w-8"
                         >
                           <Edit2 className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(route.id)}
-                          className="h-8 w-8 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)]"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Xóa tuyến đường R-{route.id}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Tuyến {route.origin} → {route.destination} sẽ bị xóa khỏi hệ thống. Hành động này không thể hoàn tác.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Đóng</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(route.id)}>
+                                Xác nhận xóa
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -202,10 +234,9 @@ export default function ManageRoutes() {
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">
-              Không tìm thấy tuyến đường nào phù hợp.
-            </div>
+            <EmptyState icon={RouteIcon} title="Không tìm thấy tuyến đường nào phù hợp." />
           )}
+          <Pagination pagination={pagination} onPageChange={setPage} className="mt-4" />
         </CardContent>
       </Card>
 
@@ -223,71 +254,56 @@ export default function ManageRoutes() {
 
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="space-y-4 my-4">
-              
-              {/* Origin */}
-              <div className="space-y-1.5">
-                <Label htmlFor="origin">Điểm đi / Nơi xuất phát</Label>
+
+              <FormField label="Điểm đi / Nơi xuất phát" htmlFor="origin" error={errors.origin?.message}>
                 <Input
                   id="origin"
                   placeholder="Hà Nội"
                   {...register('origin')}
-                  className={errors.origin ? 'border-red-500' : ''}
+                  className={errors.origin ? 'border-[hsl(var(--destructive))]' : ''}
                 />
-                {errors.origin && <p className="text-xs text-red-500">{errors.origin.message}</p>}
-              </div>
+              </FormField>
 
-              {/* Destination */}
-              <div className="space-y-1.5">
-                <Label htmlFor="destination">Điểm đến / Nơi cập bến</Label>
+              <FormField label="Điểm đến / Nơi cập bến" htmlFor="destination" error={errors.destination?.message}>
                 <Input
                   id="destination"
                   placeholder="Hải Phòng"
                   {...register('destination')}
-                  className={errors.destination ? 'border-red-500' : ''}
+                  className={errors.destination ? 'border-[hsl(var(--destructive))]' : ''}
                 />
-                {errors.destination && <p className="text-xs text-red-500">{errors.destination.message}</p>}
-              </div>
+              </FormField>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* Distance */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="distance_km">Cự ly (km)</Label>
+                <FormField label="Cự ly (km)" htmlFor="distance_km" error={errors.distance_km?.message}>
                   <Input
                     id="distance_km"
                     type="number"
                     placeholder="120"
                     {...register('distance_km')}
-                    className={errors.distance_km ? 'border-red-500' : ''}
+                    className={errors.distance_km ? 'border-[hsl(var(--destructive))]' : ''}
                   />
-                  {errors.distance_km && <p className="text-xs text-red-500">{errors.distance_km.message}</p>}
-                </div>
+                </FormField>
 
-                {/* Duration */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="duration_min">Thời gian chạy (phút)</Label>
+                <FormField label="Thời gian chạy (phút)" htmlFor="duration_min" error={errors.duration_min?.message}>
                   <Input
                     id="duration_min"
                     type="number"
                     placeholder="150"
                     {...register('duration_min')}
-                    className={errors.duration_min ? 'border-red-500' : ''}
+                    className={errors.duration_min ? 'border-[hsl(var(--destructive))]' : ''}
                   />
-                  {errors.duration_min && <p className="text-xs text-red-500">{errors.duration_min.message}</p>}
-                </div>
+                </FormField>
               </div>
 
-              {/* Base price */}
-              <div className="space-y-1.5">
-                <Label htmlFor="base_price">Giá vé gốc (VND)</Label>
+              <FormField label="Giá vé gốc (VND)" htmlFor="base_price" error={errors.base_price?.message}>
                 <Input
                   id="base_price"
                   type="number"
                   placeholder="120000"
                   {...register('base_price')}
-                  className={errors.base_price ? 'border-red-500' : ''}
+                  className={errors.base_price ? 'border-[hsl(var(--destructive))]' : ''}
                 />
-                {errors.base_price && <p className="text-xs text-red-500">{errors.base_price.message}</p>}
-              </div>
+              </FormField>
 
             </div>
 
@@ -301,6 +317,6 @@ export default function ManageRoutes() {
         </DialogContent>
       </Dialog>
 
-    </div>
+    </motion.div>
   )
 }

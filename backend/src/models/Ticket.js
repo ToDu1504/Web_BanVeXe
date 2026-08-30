@@ -19,6 +19,16 @@ const Ticket = sequelize.define('Ticket', {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
+  // Mirrors seat_number while the ticket is 'booked', and is set to NULL when
+  // the ticket is cancelled/refunded. The unique index below is defined on
+  // this column (not seat_number) so that MySQL — which allows multiple NULLs
+  // in a unique index — only enforces "one active ticket per trip/seat" and
+  // never blocks a seat from being re-sold after its earlier ticket was
+  // cancelled. Keep this in sync with booking_status whenever it changes.
+  active_seat_number: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   passenger_name: {
     type: DataTypes.STRING(100),
     allowNull: false,
@@ -45,8 +55,8 @@ const Ticket = sequelize.define('Ticket', {
   indexes: [
     {
       unique: true,
-      fields: ['trip_id', 'seat_number'],
-      name: 'uq_trip_seat',
+      fields: ['trip_id', 'active_seat_number'],
+      name: 'uq_trip_active_seat',
     },
   ],
 })

@@ -1,15 +1,33 @@
-const { Route } = require('../models')
+const { Op } = require('sequelize')
+const { Route, Trip } = require('../models')
+const { getPagination, buildPaginationMeta } = require('../utils/pagination')
 
 const routeController = {
-  // @desc    Get all routes
-  // @route   GET /api/routes
+  // @desc    Get all routes — paginated when `page` is provided, otherwise
+  //          the full list (used by Route/Vehicle dropdowns elsewhere).
+  // @route   GET /api/routes?page=&limit=&search=
   // @access  Public/Staff/Admin
   getAll: async (req, res) => {
     try {
-      const routes = await Route.findAll({
-        order: [['origin', 'ASC'], ['destination', 'ASC']],
-      })
-      return res.status(200).json(routes)
+      const { search } = req.query
+      const where = search
+        ? {
+            [Op.or]: [
+              { origin: { [Op.like]: `%${search}%` } },
+              { destination: { [Op.like]: `%${search}%` } },
+            ],
+          }
+        : {}
+      const order = [['origin', 'ASC'], ['destination', 'ASC']]
+
+      if (!req.query.page) {
+        const routes = await Route.findAll({ where, order })
+        return res.status(200).json(routes)
+      }
+
+      const { page, limit, offset } = getPagination(req.query)
+      const { rows, count } = await Route.findAndCountAll({ where, order, limit, offset })
+      return res.status(200).json({ data: rows, pagination: buildPaginationMeta(page, limit, count) })
     } catch (error) {
       console.error('Lỗi route getAll:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi lấy danh sách tuyến đường.' })
@@ -89,6 +107,16 @@ const routeController = {
       const route = await Route.findByPk(req.params.id)
       if (!route) {
         return res.status(404).json({ message: 'Không tìm thấy tuyến đường.' })
+      }
+
+      // Block deletion when trips exist for this route — cascading the
+      // delete would silently wipe Trip rows (and any Tickets/Invoices sold
+      // against them). Deactivate the route (is_active: false) instead.
+      const tripCount = await Trip.count({ where: { route_id: route.id } })
+      if (tripCount > 0) {
+        return res.status(400).json({
+          message: 'Không thể xóa tuyến đường đã có chuyến xe được lập lịch. Hãy vô hiệu hóa tuyến đường thay vì xóa.',
+        })
       }
 
       await route.destroy()

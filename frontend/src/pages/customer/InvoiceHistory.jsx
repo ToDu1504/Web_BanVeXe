@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { invoiceApi } from '@/api/invoiceApi'
 import { ticketApi } from '@/api/ticketApi'
 import { paymentApi } from '@/api/paymentApi'
@@ -8,14 +9,18 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import InvoiceStatus from '@/components/features/InvoiceStatus'
+import { Pagination } from '@/components/ui/pagination'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { Ticket, Eye, Trash2, Calendar, Bus, Receipt, Info, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
+import { fadeInUp } from '@/lib/motionVariants'
 
 export default function InvoiceHistory() {
   const navigate = useNavigate()
   const [invoices, setInvoices] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -25,10 +30,9 @@ export default function InvoiceHistory() {
   const fetchInvoices = async () => {
     try {
       setLoading(true)
-      const data = await invoiceApi.getMyInvoices()
-      // Ensure data is sorted by created_at desc
-      const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      setInvoices(sorted)
+      const res = await invoiceApi.getMyInvoices({ page, limit: 10 })
+      setInvoices(res.data)
+      setPagination(res.pagination)
     } catch (error) {
       toast.error('Không thể tải lịch sử hóa đơn')
     } finally {
@@ -38,7 +42,7 @@ export default function InvoiceHistory() {
 
   useEffect(() => {
     fetchInvoices()
-  }, [])
+  }, [page])
 
   const handleOpenDetail = (invoice) => {
     setSelectedInvoice(invoice)
@@ -80,9 +84,10 @@ export default function InvoiceHistory() {
       toast.success('Hủy vé thành công!')
       // Refresh current details if open
       if (selectedInvoice) {
-        const updatedInvoices = await invoiceApi.getMyInvoices()
-        setInvoices(updatedInvoices)
-        const newSel = updatedInvoices.find(inv => inv.id === selectedInvoice.id)
+        const res = await invoiceApi.getMyInvoices({ page, limit: 10 })
+        setInvoices(res.data)
+        setPagination(res.pagination)
+        const newSel = res.data.find(inv => inv.id === selectedInvoice.id)
         if (newSel) {
           setSelectedInvoice(newSel)
         } else {
@@ -101,10 +106,11 @@ export default function InvoiceHistory() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
+      <motion.div initial="hidden" animate="show" variants={fadeInUp}>
       <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold flex items-center gap-2 text-[hsl(var(--primary))]">
-            <Receipt className="h-6 w-6" />
+          <CardTitle className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+            <Receipt className="h-6 w-6 text-[hsl(var(--primary))]" />
             Lịch Sử Hóa Đơn Đặt Vé
           </CardTitle>
           <CardDescription>
@@ -115,7 +121,7 @@ export default function InvoiceHistory() {
           {loading ? (
             <div className="flex h-48 items-center justify-center">
               <div className="flex flex-col items-center space-y-4">
-                <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
+                <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--accent))]" />
                 <p className="text-sm text-[hsl(var(--muted-foreground))]">Đang tải lịch sử hóa đơn...</p>
               </div>
             </div>
@@ -166,7 +172,7 @@ export default function InvoiceHistory() {
                             )}
                           </Button>
                         )}
-                        {invoice.payment_status === 'pending' && (
+                        {(invoice.payment_status === 'pending' || invoice.payment_status === 'paid') && (
                           <Button
                             variant="destructive"
                             size="sm"
@@ -177,7 +183,8 @@ export default function InvoiceHistory() {
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                               <>
-                                <Trash2 className="h-4 w-4 mr-1" /> Hủy
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                {invoice.payment_status === 'paid' ? 'Hủy & Hoàn tiền' : 'Hủy'}
                               </>
                             )}
                           </Button>
@@ -195,8 +202,10 @@ export default function InvoiceHistory() {
               <Button onClick={() => navigate('/')} variant="default" className="mt-4">Đặt vé ngay</Button>
             </div>
           )}
+          <Pagination pagination={pagination} onPageChange={setPage} className="mt-4" />
         </CardContent>
       </Card>
+      </motion.div>
 
       {/* Invoice Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
@@ -214,9 +223,9 @@ export default function InvoiceHistory() {
               </DialogHeader>
 
               <div className="space-y-6 my-4 text-sm">
-                
+
                 {/* General Invoice Info */}
-                <div className="grid grid-cols-2 gap-4 p-4 border border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--muted))/15]">
+                <div className="grid grid-cols-2 gap-4 p-4 border border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--muted)/0.3)]">
                   <div>
                     <span className="text-xs text-[hsl(var(--muted-foreground))] block">Ngày đặt vé</span>
                     <span className="font-semibold">{formatDateTime(selectedInvoice.created_at)}</span>
@@ -245,10 +254,10 @@ export default function InvoiceHistory() {
                     <div className="space-y-4">
                       {selectedInvoice.Tickets.map((ticket) => (
                         <div key={ticket.id} className="border border-[hsl(var(--border))] p-4 rounded-xl space-y-3 relative overflow-hidden bg-[hsl(var(--card))]">
-                          
+
                           {/* Header info */}
                           <div className="flex justify-between items-center">
-                            <span className="font-bold text-sm text-[hsl(var(--primary))]">Mã vé: Ticket-{ticket.id}</span>
+                            <span className="font-bold text-sm text-[hsl(var(--foreground))]">Mã vé: Ticket-{ticket.id}</span>
                             <Badge variant={ticket.booking_status === 'booked' ? 'success' : 'destructive'}>
                               {ticket.booking_status === 'booked' ? 'Đã đặt' : 'Đã hủy'}
                             </Badge>
@@ -296,7 +305,7 @@ export default function InvoiceHistory() {
                           </div>
 
                           {/* Individual ticket cancel button */}
-                          {ticket.booking_status === 'booked' && selectedInvoice.payment_status === 'pending' && (
+                          {ticket.booking_status === 'booked' && ['pending', 'paid'].includes(selectedInvoice.payment_status) && (
                             <div className="flex justify-end pt-2">
                               <Button
                                 variant="destructive"
@@ -316,10 +325,10 @@ export default function InvoiceHistory() {
                 </div>
 
                 {/* Cancel policy details */}
-                <div className="p-3 bg-blue-50 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/30 text-blue-800 dark:text-blue-100 rounded-xl flex gap-2 text-xs">
-                  <Info className="h-4 w-4 shrink-0 text-blue-500" />
+                <div className="p-3 bg-[hsl(var(--accent)/0.08)] border border-[hsl(var(--accent)/0.2)] text-[hsl(var(--foreground))] rounded-xl flex gap-2 text-xs">
+                  <Info className="h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
                   <p>
-                    Lưu ý: Hủy vé chỉ được thực hiện khi trạng thái hóa đơn là <strong>Chờ thanh toán</strong>. Khi đã thanh toán thành công, vui lòng liên hệ hotline 1900 1234 để được hỗ trợ thủ công.
+                    Lưu ý: Chỉ có thể hủy vé trước giờ khởi hành tối thiểu <strong>24 giờ</strong>. Vé thuộc hóa đơn đã thanh toán khi hủy sẽ được chuyển sang trạng thái <strong>Đã hoàn tiền</strong>.
                   </p>
                 </div>
               </div>

@@ -12,9 +12,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Sun, Moon, Bus, Menu, LogOut, User as UserIcon, Ticket, Shield } from 'lucide-react'
+import { Sun, Moon, Menu, LogOut, User as UserIcon, Ticket, Shield } from 'lucide-react'
 import { toast } from 'sonner'
 import { authApi } from '@/api/authApi'
+import logo from '@/assets/logo.png'
 
 export default function Navbar() {
   const { user, isAuthenticated, logoutUser } = useAuth()
@@ -33,12 +34,11 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="sticky top-0 z-40 w-full border-b border-[hsl(var(--border))] bg-[hsl(var(--background))/80] backdrop-blur-md">
+    <nav className="sticky top-0 z-40 w-full border-b border-[hsl(var(--border))] bg-[hsl(var(--background)/0.8)] backdrop-blur-md">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         {/* Logo */}
-        <Link to="/" className="flex items-center space-x-2 text-[hsl(var(--primary))] font-bold text-xl hover:opacity-90">
-          <Bus className="h-6 w-6 stroke-[2.5]" />
-          <span>Đặt Vé Xe Khách</span>
+        <Link to="/" className="flex items-center hover:opacity-90">
+          <img src={logo} alt="Đặt Vé Xe Khách" className="h-12 w-auto" />
         </Link>
 
         {/* Desktop Navigation */}
@@ -71,7 +71,7 @@ export default function Navbar() {
             <DropdownMenu>
               <DropdownMenuTrigger className="focus:outline-none">
                 <Avatar className="h-9 w-9 border border-[hsl(var(--border))]">
-                  <AvatarFallback className="bg-[hsl(var(--primary))] text-white font-bold">
+                  <AvatarFallback className="bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-bold">
                     {user?.full_name?.charAt(0).toUpperCase() || 'U'}
                   </AvatarFallback>
                 </Avatar>
@@ -95,7 +95,7 @@ export default function Navbar() {
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-500 focus:bg-red-50 focus:text-red-600 dark:focus:bg-red-950/20">
+                <DropdownMenuItem onClick={handleLogout} className="text-[hsl(var(--destructive))] focus:bg-[hsl(var(--destructive)/0.1)] focus:text-[hsl(var(--destructive))]">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Đăng xuất</span>
                 </DropdownMenuItem>

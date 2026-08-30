@@ -1,16 +1,36 @@
-const { User } = require('../models')
+const { Op } = require('sequelize')
+const { User, Invoice } = require('../models')
+const { getPagination, buildPaginationMeta } = require('../utils/pagination')
 
 const userController = {
-  // @desc    Get all users
-  // @route   GET /api/users
+  // @desc    Get all users — paginated when `page` is provided
+  // @route   GET /api/users?page=&limit=&search=&role=
   // @access  Private/Admin
   getAll: async (req, res) => {
     try {
-      const users = await User.findAll({
-        attributes: { exclude: ['password'] },
-        order: [['created_at', 'DESC']],
-      })
-      return res.status(200).json(users)
+      const { search, role } = req.query
+      const where = {}
+      if (search) {
+        where[Op.or] = [
+          { full_name: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } },
+          { phone: { [Op.like]: `%${search}%` } },
+        ]
+      }
+      if (role && role !== 'all') {
+        where.role = role
+      }
+      const order = [['created_at', 'DESC']]
+      const attributes = { exclude: ['password'] }
+
+      if (!req.query.page) {
+        const users = await User.findAll({ where, attributes, order })
+        return res.status(200).json(users)
+      }
+
+      const { page, limit, offset } = getPagination(req.query)
+      const { rows, count } = await User.findAndCountAll({ where, attributes, order, limit, offset })
+      return res.status(200).json({ data: rows, pagination: buildPaginationMeta(page, limit, count) })
     } catch (error) {
       console.error('Lỗi user getAll:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi lấy danh sách tài khoản.' })
@@ -126,6 +146,16 @@ const userController = {
 
       if (user.id === req.user.id) {
         return res.status(400).json({ message: 'Bạn không thể tự xóa tài khoản của bản thân.' })
+      }
+
+      // Block deletion when this user has invoices — cascading the delete
+      // would silently wipe their purchase/financial history (Invoice ->
+      // Ticket). Lock the account (is_active: false) instead.
+      const invoiceCount = await Invoice.count({ where: { user_id: user.id } })
+      if (invoiceCount > 0) {
+        return res.status(400).json({
+          message: 'Không thể xóa tài khoản đã có lịch sử hóa đơn. Hãy khóa tài khoản thay vì xóa.',
+        })
       }
 
       await user.destroy()

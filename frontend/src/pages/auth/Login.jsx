@@ -7,10 +7,11 @@ import { useAuth } from '@/hooks/useAuth'
 import { authApi } from '@/api/authApi'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { FormField } from '@/components/ui/form-field'
+import { CardContent, CardFooter } from '@/components/ui/card'
+import AuthLayout from '@/components/common/AuthLayout'
 import { toast } from 'sonner'
-import { Loader2, Eye, EyeOff } from 'lucide-react'
+import { Loader2, Eye, EyeOff, Mail, Lock } from 'lucide-react'
 
 const loginSchema = zod.object({
   email: zod.string().min(1, 'Email không được để trống').email('Email không đúng định dạng'),
@@ -60,75 +61,66 @@ export default function Login() {
   }
 
   return (
-    <div className="container mx-auto flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-8">
-      <Card className="w-full max-w-md border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Đăng nhập</CardTitle>
-          <CardDescription className="text-center">
-            Đăng nhập để đặt vé xe và quản lý vé dễ dàng hơn
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="space-y-4">
-            {/* Email Field */}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+    <AuthLayout
+      title="Đăng nhập"
+      description="Đăng nhập để đặt vé xe và quản lý vé dễ dàng hơn"
+      footer={
+        <>
+          Chưa có tài khoản?{' '}
+          <Link to="/register" className="font-semibold text-[hsl(var(--foreground))] hover:underline">
+            Đăng ký ngay
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <CardContent className="space-y-4">
+          <FormField label="Email" htmlFor="email" error={errors.email?.message}>
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
               <Input
                 id="email"
                 type="email"
                 placeholder="example@domain.com"
                 {...register('email')}
-                className={errors.email ? 'border-red-500' : ''}
+                className={`pl-9 ${errors.email ? 'border-[hsl(var(--destructive))]' : ''}`}
               />
-              {errors.email && (
-                <p className="text-xs text-red-500 font-medium">{errors.email.message}</p>
-              )}
             </div>
+          </FormField>
 
-            {/* Password Field */}
-            <div className="space-y-2">
-              <Label htmlFor="password">Mật khẩu</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  {...register('password')}
-                  className={errors.password ? 'border-red-500 pr-10' : 'pr-10'}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {errors.password && (
-                <p className="text-xs text-red-500 font-medium">{errors.password.message}</p>
-              )}
+          <FormField label="Mật khẩu" htmlFor="password" error={errors.password?.message}>
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                {...register('password')}
+                className={`pl-9 pr-10 ${errors.password ? 'border-[hsl(var(--destructive))]' : ''}`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full font-semibold" disabled={loading} variant="default">
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Đang xử lý...
-                </>
-              ) : (
-                'Đăng nhập'
-              )}
-            </Button>
-            <div className="text-sm text-center text-[hsl(var(--muted-foreground))]">
-              Chưa có tài khoản?{' '}
-              <Link to="/register" className="text-[hsl(var(--primary))] font-semibold hover:underline">
-                Đăng ký ngay
-              </Link>
-            </div>
-          </CardFooter>
-        </form>
-      </Card>
-    </div>
+          </FormField>
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" className="w-full font-semibold" size="lg" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Đang xử lý...
+              </>
+            ) : (
+              'Đăng nhập'
+            )}
+          </Button>
+        </CardFooter>
+      </form>
+    </AuthLayout>
   )
 }

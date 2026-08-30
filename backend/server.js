@@ -2,12 +2,17 @@ require('dotenv').config()
 const app = require('./src/app')
 const { connectDB } = require('./src/config/db')
 require('./src/models') // Register all Sequelize associations
+const { startExpireInvoicesJob } = require('./src/jobs/expireInvoices')
+const { startGenerateTripsJob } = require('./src/jobs/generateTripsFromTemplates')
 
 const PORT = process.env.PORT || 8080
 
 const startServer = async () => {
   // Attempt DB connection (non-fatal so server still starts without DB)
   await connectDB()
+
+  startExpireInvoicesJob()
+  startGenerateTripsJob()
 
   app.listen(PORT, () => {
     console.log(`🚌 Đặt Vé Xe Khách Server đang chạy tại: http://localhost:${PORT}`)

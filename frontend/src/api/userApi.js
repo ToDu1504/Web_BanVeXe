@@ -1,8 +1,8 @@
 import axiosInstance from './axiosInstance'
 
 export const userApi = {
-  getAll: async () => {
-    const response = await axiosInstance.get('/users')
+  getAll: async (params) => {
+    const response = await axiosInstance.get('/users', { params })
     return response.data
   },
   create: async (userData) => {

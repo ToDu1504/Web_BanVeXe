@@ -1,27 +1,70 @@
 import React, { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { userApi } from '@/api/userApi'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Search, Trash2, Users, Loader2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import PageHeader from '@/components/common/PageHeader'
+import TableSkeleton from '@/components/common/TableSkeleton'
+import EmptyState from '@/components/common/EmptyState'
+import { Pagination } from '@/components/ui/pagination'
+import { Search, Trash2, Users } from 'lucide-react'
 import { toast } from 'sonner'
+import { fadeInUp } from '@/lib/motionVariants'
+import { cn } from '@/lib/utils'
+
+const roleFilters = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'customer', label: 'Khách hàng' },
+  { value: 'staff', label: 'Nhân viên' },
+  { value: 'admin', label: 'Quản trị viên' },
+]
+
+const roleSelectTone = {
+  customer: '',
+  staff: 'text-[hsl(var(--primary))]',
+  admin: 'text-[hsl(var(--destructive))]',
+}
 
 export default function ManageUsers() {
   const [users, setUsers] = useState([])
-  const [filteredUsers, setFilteredUsers] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 400)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, roleFilter])
 
   const fetchUsers = async () => {
     try {
       setLoading(true)
-      const data = await userApi.getAll()
-      setUsers(data)
-      setFilteredUsers(data)
+      const res = await userApi.getAll({ page, limit: 10, search: debouncedSearch || undefined, role: roleFilter })
+      setUsers(res.data)
+      setPagination(res.pagination)
     } catch (error) {
       toast.error('Không thể tải danh sách tài khoản')
     } finally {
@@ -31,19 +74,7 @@ export default function ManageUsers() {
 
   useEffect(() => {
     fetchUsers()
-  }, [])
-
-  // Filter users based on query search
-  useEffect(() => {
-    const q = searchQuery.toLowerCase()
-    const result = users.filter(
-      (u) =>
-        u.full_name?.toLowerCase().includes(q) ||
-        u.email?.toLowerCase().includes(q) ||
-        u.phone?.includes(q)
-    )
-    setFilteredUsers(result)
-  }, [searchQuery, users])
+  }, [page, debouncedSearch, roleFilter])
 
   const handleRoleChange = async (id, newRole) => {
     try {
@@ -73,8 +104,6 @@ export default function ManageUsers() {
   }
 
   const handleDeleteUser = async (id) => {
-    if (!window.confirm('Bạn có chắc muốn xóa tài khoản này?')) return
-
     try {
       await userApi.delete(id)
       toast.success('Xóa tài khoản thành công!')
@@ -84,22 +113,16 @@ export default function ManageUsers() {
     }
   }
 
-  const roleLabels = {
-    customer: 'Khách hàng',
-    staff: 'Nhân viên',
-    admin: 'Quản trị viên',
-  }
-
   return (
-    <div className="space-y-6">
-      
-      <div>
-        <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Quản Lý Tài Khoản Thành Viên</h2>
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">Phân quyền vai trò (Admin, Nhân viên, Khách hàng) và bật/tắt hoạt động của tài khoản.</p>
-      </div>
+    <motion.div initial="hidden" animate="show" variants={fadeInUp} className="space-y-6">
+
+      <PageHeader
+        title="Quản Lý Tài Khoản Thành Viên"
+        description="Phân quyền vai trò (Admin, Nhân viên, Khách hàng) và bật/tắt hoạt động của tài khoản."
+      />
 
       <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm">
-        <CardHeader className="pb-4">
+        <CardHeader className="flex-col items-start gap-4 pb-4 md:flex-row md:items-center md:justify-between">
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
             <Input
@@ -109,13 +132,28 @@ export default function ManageUsers() {
               className="pl-9 h-9"
             />
           </div>
+          <div className="flex flex-wrap gap-2">
+            {roleFilters.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => setRoleFilter(f.value)}
+                className={cn(
+                  'whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-medium shadow-sm transition-colors',
+                  roleFilter === f.value
+                    ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
+                    : 'bg-[hsl(var(--muted))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.7)]'
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
-            </div>
-          ) : filteredUsers.length > 0 ? (
+            <TableSkeleton rows={5} columns={6} />
+          ) : users.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -128,11 +166,11 @@ export default function ManageUsers() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((u) => (
+                {users.map((u) => (
                   <TableRow key={u.id}>
                     <TableCell className="font-semibold text-xs flex items-center gap-2">
                       <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] font-bold text-xs">
+                        <AvatarFallback className="bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] font-bold text-xs">
                           {u.full_name?.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
@@ -145,7 +183,7 @@ export default function ManageUsers() {
                         value={u.role}
                         onValueChange={(val) => handleRoleChange(u.id, val)}
                       >
-                        <SelectTrigger className="w-36 h-8 text-xs">
+                        <SelectTrigger className={cn('w-36 h-8 text-xs font-medium', roleSelectTone[u.role])}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -161,33 +199,54 @@ export default function ManageUsers() {
                           checked={u.is_active}
                           onCheckedChange={() => handleStatusToggle(u.id, u.is_active)}
                         />
-                        <span className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))]">
+                        <span
+                          className={cn(
+                            'text-[10px] font-semibold',
+                            u.is_active ? 'text-[hsl(var(--success))]' : 'text-[hsl(var(--destructive))]'
+                          )}
+                        >
                           {u.is_active ? 'Hoạt động' : 'Đang khóa'}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteUser(u.id)}
-                        className="h-8 w-8 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)]"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Xóa tài khoản {u.full_name}?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Hành động này sẽ xóa vĩnh viễn tài khoản khỏi hệ thống và không thể hoàn tác.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Đóng</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteUser(u.id)}>
+                              Xác nhận xóa
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">
-              Không tìm thấy thành viên nào phù hợp.
-            </div>
+            <EmptyState icon={Users} title="Không tìm thấy thành viên nào phù hợp." />
           )}
+          <Pagination pagination={pagination} onPageChange={setPage} className="mt-4" />
         </CardContent>
       </Card>
 
-    </div>
+    </motion.div>
   )
 }

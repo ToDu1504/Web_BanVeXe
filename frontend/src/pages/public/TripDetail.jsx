@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { tripApi } from '@/api/tripApi'
 import { useBooking } from '@/hooks/useBooking'
 import { useAuth } from '@/hooks/useAuth'
@@ -10,6 +11,10 @@ import { Badge } from '@/components/ui/badge'
 import { Bus, MapPin, Calendar, Clock, ArrowRight, Loader2, Info } from 'lucide-react'
 import { formatCurrency, formatDateTime, formatDuration } from '@/lib/utils'
 import { toast } from 'sonner'
+import { fadeInUp } from '@/lib/motionVariants'
+
+const formatTime = (dateStr) =>
+  new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date(dateStr))
 
 export default function TripDetail() {
   const { id } = useParams()
@@ -48,7 +53,7 @@ export default function TripDetail() {
     return (
       <div className="flex h-[400px] w-full items-center justify-center">
         <div className="flex flex-col items-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
+          <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--accent))]" />
           <p className="text-sm text-[hsl(var(--muted-foreground))]">Đang tải sơ đồ ghế...</p>
         </div>
       </div>
@@ -81,13 +86,52 @@ export default function TripDetail() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
+
+      {/* Trip Header Summary */}
+      <div className="mb-8 flex flex-col gap-6 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-sm md:flex-row md:items-center md:justify-between">
+        <div>
+          <Badge variant="secondary" className="mb-2">{vehicleTypeLabels[selectedTrip.Vehicle?.vehicle_type]}</Badge>
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-[hsl(var(--foreground))]">
+            {selectedTrip.Route?.origin}
+            <ArrowRight className="h-5 w-5 text-[hsl(var(--muted-foreground))]" />
+            {selectedTrip.Route?.destination}
+          </h1>
+          <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+            {selectedTrip.Vehicle?.license_plate && `Xe ${selectedTrip.Vehicle.license_plate} • `}
+            Biển số được cấp phép vận chuyển hành khách
+          </p>
+        </div>
+        <div className="flex items-center gap-4 rounded-xl bg-[hsl(var(--muted)/0.4)] p-4">
+          <div className="text-center">
+            <div className="text-xl font-semibold text-[hsl(var(--primary))]">{formatTime(selectedTrip.departure_time)}</div>
+            <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Khởi hành</div>
+          </div>
+          <div className="flex w-16 flex-col items-center">
+            <span className="text-[10px] uppercase text-[hsl(var(--muted-foreground))]">{formatDuration(selectedTrip.Route?.duration_min)}</span>
+            <div className="relative my-1 h-px w-full bg-[hsl(var(--border))]">
+              <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[hsl(var(--border))]" />
+            </div>
+            <Bus className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-semibold text-[hsl(var(--foreground))]">{selectedTrip.arrival_time ? formatTime(selectedTrip.arrival_time) : '—'}</div>
+            <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Đến nơi</div>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
+
         {/* Left Column: Seat Map Selection */}
-        <div className="lg:col-span-8 space-y-6">
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={fadeInUp}
+          className="lg:col-span-8 space-y-6"
+        >
           <div className="flex flex-col space-y-2">
-            <h2 className="text-2xl font-extrabold text-[hsl(var(--foreground))] flex items-center gap-2">
-              <Bus className="h-6 w-6 text-[hsl(var(--primary))]" />
+            <h2 className="text-lg font-semibold tracking-tight text-[hsl(var(--foreground))] flex items-center gap-2">
+              <Bus className="h-5 w-5 text-[hsl(var(--primary))]" />
               Chọn Ghế Xe Khách
             </h2>
             <p className="text-sm text-[hsl(var(--muted-foreground))]">
@@ -102,10 +146,16 @@ export default function TripDetail() {
             selectedSeats={selectedSeatNumbers}
             onSeatClick={toggleSeatSelection}
           />
-        </div>
+        </motion.div>
 
         {/* Right Column: Sticky Trip Summary & Checkout Info */}
-        <div className="lg:col-span-4 lg:sticky lg:top-24 space-y-6">
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={fadeInUp}
+          transition={{ delay: 0.1 }}
+          className="lg:col-span-4 lg:sticky lg:top-24 space-y-6"
+        >
           <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg">
             <CardHeader>
               <CardTitle className="text-lg">Thông tin chuyến đi</CardTitle>
@@ -114,7 +164,7 @@ export default function TripDetail() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
-              
+
               {/* Route segment */}
               <div className="flex items-center justify-between pb-3 border-b border-[hsl(var(--border))]">
                 <div className="font-bold text-[hsl(var(--foreground))]">{selectedTrip.Route?.origin}</div>
@@ -132,13 +182,13 @@ export default function TripDetail() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-[hsl(var(--muted-foreground))] flex items-center">
-                    <Calendar className="h-4 w-4 mr-1.5 text-[hsl(var(--primary))]" /> Ngày đi
+                    <Calendar className="h-4 w-4 mr-1.5" /> Ngày đi
                   </span>
                   <span className="font-medium">{formatDateTime(selectedTrip.departure_time)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[hsl(var(--muted-foreground))] flex items-center">
-                    <Clock className="h-4 w-4 mr-1.5 text-[hsl(var(--primary))]" /> Thời gian chạy
+                    <Clock className="h-4 w-4 mr-1.5" /> Thời gian chạy
                   </span>
                   <span className="font-medium">{formatDuration(selectedTrip.Route?.duration_min)}</span>
                 </div>
@@ -158,28 +208,28 @@ export default function TripDetail() {
               </div>
 
             </CardContent>
-            
-            <CardFooter className="flex flex-col space-y-3 bg-[hsl(var(--muted))/20] border-t border-[hsl(var(--border))] p-6 rounded-b-xl">
+
+            <CardFooter className="flex flex-col space-y-3 bg-[hsl(var(--muted)/0.4)] border-t border-[hsl(var(--border))] p-6 rounded-b-xl">
               <div className="flex justify-between items-center w-full">
                 <span className="text-sm font-semibold">Tổng thanh toán:</span>
-                <span className="text-xl font-extrabold text-[hsl(var(--primary))]">
+                <span className="text-xl font-bold text-[hsl(var(--primary))]">
                   {formatCurrency(totalPrice)}
                 </span>
               </div>
-              <Button onClick={handleProceed} variant="accent" className="w-full font-bold">
+              <Button onClick={handleProceed} variant="accent" size="lg" className="w-full font-semibold">
                 Tiếp tục đặt vé
               </Button>
             </CardFooter>
           </Card>
 
           {/* Info Card */}
-          <div className="bg-[hsl(var(--muted))/30] border border-[hsl(var(--border))] p-4 rounded-xl flex gap-3 text-xs text-[hsl(var(--muted-foreground))]">
+          <div className="bg-[hsl(var(--muted)/0.5)] border border-[hsl(var(--border))] p-4 rounded-xl flex gap-3 text-xs text-[hsl(var(--muted-foreground))]">
             <Info className="h-5 w-5 text-[hsl(var(--primary))] shrink-0" />
             <p>
               Hệ thống hỗ trợ hoàn hủy vé trực tuyến trước giờ khởi hành tối thiểu 24 giờ. Phí hủy vé có thể áp dụng theo quy chế.
             </p>
           </div>
-        </div>
+        </motion.div>
 
       </div>
     </div>

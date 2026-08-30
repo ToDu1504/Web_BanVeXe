@@ -6,8 +6,8 @@ export const invoiceApi = {
     const response = await axiosInstance.post('/invoices', invoiceData)
     return response.data
   },
-  getMyInvoices: async () => {
-    const response = await axiosInstance.get('/invoices/my')
+  getMyInvoices: async (params) => {
+    const response = await axiosInstance.get('/invoices/my', { params })
     return response.data
   },
   getById: async (id) => {
@@ -19,8 +19,8 @@ export const invoiceApi = {
     return response.data
   },
   // Staff/Admin endpoints
-  getAll: async () => {
-    const response = await axiosInstance.get('/invoices')
+  getAll: async (params) => {
+    const response = await axiosInstance.get('/invoices', { params })
     return response.data
   },
   updateStatus: async (id, statusData) => {

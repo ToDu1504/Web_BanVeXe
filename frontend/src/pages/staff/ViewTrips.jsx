@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { tripApi } from '@/api/tripApi'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
@@ -7,17 +8,24 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import SeatMap from '@/components/features/SeatMap'
-import { CalendarDays, Search, MapPin, Eye, Loader2, RefreshCw, Bus, AlertCircle } from 'lucide-react'
+import TableSkeleton from '@/components/common/TableSkeleton'
+import EmptyState from '@/components/common/EmptyState'
+import { Pagination } from '@/components/ui/pagination'
+import TripStatus from '@/components/features/TripStatus'
+import { CalendarDays, Search, Eye, Loader2, RefreshCw, Bus } from 'lucide-react'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { toast } from 'sonner'
+import { fadeInUp } from '@/lib/motionVariants'
 
 export default function ViewTrips() {
   const [trips, setTrips] = useState([])
-  const [filteredTrips, setFilteredTrips] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
 
   // SeatMap Dialog state
@@ -26,12 +34,21 @@ export default function ViewTrips() {
   const [loadingSeats, setLoadingSeats] = useState(false)
   const [seatMapOpen, setSeatMapOpen] = useState(false)
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 400)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, statusFilter])
+
   const fetchTrips = async () => {
     try {
       setLoading(true)
-      const data = await tripApi.getAll()
-      setTrips(data)
-      setFilteredTrips(data)
+      const res = await tripApi.getAll({ page, limit: 10, search: debouncedSearch || undefined, status: statusFilter })
+      setTrips(res.data)
+      setPagination(res.pagination)
     } catch (error) {
       toast.error('Không thể tải danh sách chuyến xe')
     } finally {
@@ -41,28 +58,7 @@ export default function ViewTrips() {
 
   useEffect(() => {
     fetchTrips()
-  }, [])
-
-  // Search & Filter
-  useEffect(() => {
-    let result = trips
-
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase()
-      result = result.filter(
-        (t) =>
-          t.Route?.origin?.toLowerCase().includes(q) ||
-          t.Route?.destination?.toLowerCase().includes(q) ||
-          t.Vehicle?.license_plate?.toLowerCase().includes(q)
-      )
-    }
-
-    if (statusFilter !== 'all') {
-      result = result.filter((t) => t.status === statusFilter)
-    }
-
-    setFilteredTrips(result)
-  }, [searchQuery, statusFilter, trips])
+  }, [page, debouncedSearch, statusFilter])
 
   const handleOpenSeatMap = async (trip) => {
     setSelectedTrip(trip)
@@ -78,27 +74,13 @@ export default function ViewTrips() {
     }
   }
 
-  const tripStatusLabels = {
-    scheduled: 'Lên lịch',
-    ongoing: 'Đang chạy',
-    completed: 'Hoàn thành',
-    cancelled: 'Đã hủy',
-  }
-
-  const tripStatusColors = {
-    scheduled: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-    ongoing: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-    completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-    cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  }
-
   return (
-    <div className="space-y-6">
+    <motion.div initial="hidden" animate="show" variants={fadeInUp} className="space-y-6">
       <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <div>
-            <CardTitle className="text-xl font-bold flex items-center gap-2 text-[hsl(var(--primary))]">
-              <CalendarDays className="h-5 w-5" />
+            <CardTitle className="text-xl font-semibold tracking-tight flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-[hsl(var(--primary))]" />
               Theo Dõi Lịch Trình Chuyến Xe
             </CardTitle>
             <CardDescription>
@@ -141,13 +123,8 @@ export default function ViewTrips() {
 
           {/* Table list */}
           {loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <div className="flex flex-col items-center space-y-4">
-                <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
-                <p className="text-sm text-[hsl(var(--muted-foreground))]">Đang tải danh sách lịch trình...</p>
-              </div>
-            </div>
-          ) : filteredTrips.length > 0 ? (
+            <TableSkeleton rows={5} columns={7} />
+          ) : trips.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -161,7 +138,7 @@ export default function ViewTrips() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTrips.map((trip) => (
+                {trips.map((trip) => (
                   <TableRow key={trip.id}>
                     <TableCell>
                       <div className="flex flex-col">
@@ -183,7 +160,7 @@ export default function ViewTrips() {
                       </div>
                     </TableCell>
                     <TableCell className="text-xs">
-                      <span className="font-bold text-green-600 dark:text-green-400">
+                      <span className="font-bold text-[hsl(var(--success))]">
                         {trip.available_seats}
                       </span>
                       /{trip.Vehicle?.total_seats} ghế
@@ -192,16 +169,14 @@ export default function ViewTrips() {
                       {formatCurrency(trip.price)}
                     </TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${tripStatusColors[trip.status]}`}>
-                        {tripStatusLabels[trip.status] || trip.status}
-                      </span>
+                      <TripStatus status={trip.status} />
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleOpenSeatMap(trip)}
-                        className="h-8 w-8 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                        className="h-8 w-8"
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -211,11 +186,9 @@ export default function ViewTrips() {
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-12 text-[hsl(var(--muted-foreground))] flex flex-col items-center justify-center space-y-2">
-              <Bus className="h-10 w-10 opacity-30 stroke-[1.5]" />
-              <p>Không tìm thấy chuyến xe nào phù hợp với bộ lọc.</p>
-            </div>
+            <EmptyState icon={Bus} title="Không tìm thấy chuyến xe nào phù hợp với bộ lọc." />
           )}
+          <Pagination pagination={pagination} onPageChange={setPage} />
         </CardContent>
       </Card>
 
@@ -237,13 +210,13 @@ export default function ViewTrips() {
               {loadingSeats ? (
                 <div className="flex h-64 items-center justify-center">
                   <div className="flex flex-col items-center space-y-4">
-                    <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
+                    <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--accent))]" />
                     <p className="text-sm text-[hsl(var(--muted-foreground))]">Đang tải sơ đồ đặt chỗ...</p>
                   </div>
                 </div>
               ) : (
                 <div className="py-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-4 text-xs border border-[hsl(var(--border))] rounded-xl p-3 bg-[hsl(var(--muted))/15]">
+                  <div className="grid grid-cols-2 gap-4 text-xs border border-[hsl(var(--border))] rounded-xl p-3 bg-[hsl(var(--muted)/0.3)]">
                     <div>
                       <p><strong>Ngày khởi hành:</strong> {formatDateTime(selectedTrip.departure_time)}</p>
                       <p className="mt-1"><strong>Tổng số ghế:</strong> {selectedTrip.Vehicle?.total_seats} ghế</p>
@@ -254,7 +227,7 @@ export default function ViewTrips() {
                     </div>
                   </div>
 
-                  <div className="border border-[hsl(var(--border))] rounded-xl p-4 bg-white/5">
+                  <div className="border border-[hsl(var(--border))] rounded-xl p-4">
                     <SeatMap
                       totalSeats={selectedTrip.Vehicle?.total_seats}
                       layout={selectedTrip.Vehicle?.seat_layout}
@@ -269,6 +242,6 @@ export default function ViewTrips() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </motion.div>
   )
 }

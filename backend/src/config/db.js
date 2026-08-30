@@ -17,6 +17,28 @@ const sequelize = new Sequelize(
       updatedAt: 'updated_at',
     },
     timezone: '+07:00', // Set to Vietnam timezone
+    dialectOptions: {
+      // MySQL's JSON columns (Vehicle.seat_layout, TripTemplate.days_of_week)
+      // travel over the wire protocol tagged as field.type 'BLOB' (not
+      // 'JSON', despite the column actually being JSON) — mysql2 hands them
+      // back as raw text, and Sequelize's DataTypes.JSON doesn't re-parse
+      // for MySQL, so without this every JSON field comes back as a
+      // double-encoded string instead of a real object/array. This app has
+      // no real BLOB columns, so it's safe to treat every 'BLOB' field as
+      // JSON here — parse once, for the whole app.
+      typeCast: (field, next) => {
+        if (field.type === 'BLOB' || field.type === 'JSON') {
+          const raw = field.string()
+          if (raw === null) return null
+          try {
+            return JSON.parse(raw)
+          } catch {
+            return raw
+          }
+        }
+        return next()
+      },
+    },
   }
 )
 

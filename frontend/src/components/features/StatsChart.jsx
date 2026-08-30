@@ -1,8 +1,8 @@
 import React from 'react'
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   BarChart,
   Bar,
   XAxis,
@@ -32,7 +32,13 @@ export default function StatsChart({ data = [], type = 'line', dataKey = 'revenu
     <div className="w-full h-[350px]">
       <ResponsiveContainer width="100%" height="100%">
         {type === 'line' ? (
-          <LineChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+            <defs>
+              <linearGradient id="statsChartFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
+                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+              </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
             <XAxis
               dataKey="date"
@@ -53,14 +59,15 @@ export default function StatsChart({ data = [], type = 'line', dataKey = 'revenu
               }
             />
             <Tooltip content={<CustomTooltip />} />
-            <Line
+            <Area
               type="monotone"
               dataKey={dataKey}
               stroke="hsl(var(--primary))"
               strokeWidth={3}
+              fill="url(#statsChartFill)"
               activeDot={{ r: 6 }}
             />
-          </LineChart>
+          </AreaChart>
         ) : (
           <BarChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />

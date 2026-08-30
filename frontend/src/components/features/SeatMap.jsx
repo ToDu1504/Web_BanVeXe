@@ -2,6 +2,7 @@ import React from 'react'
 import { motion } from 'framer-motion'
 import { Check, ShieldAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fadeInUp } from '@/lib/motionVariants'
 
 export default function SeatMap({
   totalSeats = 40,
@@ -36,7 +37,12 @@ export default function SeatMap({
     }
 
     return (
-      <div className="flex flex-col space-y-3 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-2xl p-6 shadow-sm">
+      <motion.div
+        initial="hidden"
+        animate="show"
+        variants={fadeInUp}
+        className="flex flex-col space-y-3 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-2xl p-6 shadow-sm"
+      >
         <h4 className="text-center font-bold text-sm text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-2">
           {floors > 1 ? `Tầng ${floorIndex + 1}` : 'Sơ đồ ghế xe'}
         </h4>
@@ -68,7 +74,7 @@ export default function SeatMap({
                   className={cn(
                     "relative w-12 h-12 rounded-xl flex flex-col items-center justify-center font-semibold text-xs transition-all border",
                     isBooked
-                      ? "bg-red-100 text-red-500 border-red-200 cursor-not-allowed dark:bg-red-950/20 dark:border-red-900/30"
+                      ? "bg-[hsl(var(--destructive)/0.1)] text-[hsl(var(--destructive))] border-[hsl(var(--destructive)/0.2)] cursor-not-allowed"
                       : isSelected
                       ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] border-[hsl(var(--primary))] shadow-sm"
                       : "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]"
@@ -83,14 +89,14 @@ export default function SeatMap({
             })
           )}
         </div>
-      </div>
+      </motion.div>
     )
   }
 
   return (
     <div className="flex flex-col space-y-6">
       {/* Legend */}
-      <div className="flex flex-wrap items-center justify-center gap-6 bg-[hsl(var(--muted))/50] rounded-xl p-4 text-xs font-medium">
+      <div className="flex flex-wrap items-center justify-center gap-6 bg-[hsl(var(--muted)/0.5)] rounded-xl p-4 text-xs font-medium">
         <div className="flex items-center space-x-2">
           <div className="w-6 h-6 rounded-md bg-[hsl(var(--card))] border border-[hsl(var(--border))]" />
           <span>Ghế trống</span>
@@ -100,7 +106,7 @@ export default function SeatMap({
           <span>Đang chọn</span>
         </div>
         <div className="flex items-center space-x-2">
-          <div className="w-6 h-6 rounded-md bg-red-100 border border-red-200 dark:bg-red-950/20 dark:border-red-900/30" />
+          <div className="w-6 h-6 rounded-md bg-[hsl(var(--destructive)/0.1)] border border-[hsl(var(--destructive)/0.2)]" />
           <span>Đã bán / Không bán</span>
         </div>
       </div>

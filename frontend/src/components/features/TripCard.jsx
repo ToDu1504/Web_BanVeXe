@@ -51,7 +51,7 @@ export default function TripCard({ trip }) {
                     {formatDateTime(trip.departure_time)}
                   </span>
                 </div>
-                <ArrowRight className="h-5 w-5 text-[hsl(var(--primary))]" />
+                <ArrowRight className="h-5 w-5 text-[hsl(var(--muted-foreground))]" />
                 <div className="flex flex-col">
                   <span className="text-lg font-bold text-[hsl(var(--foreground))]">
                     {trip.Route?.destination}
@@ -68,7 +68,7 @@ export default function TripCard({ trip }) {
               {/* Duration and distance info */}
               <div className="flex items-center space-x-4 text-xs text-[hsl(var(--muted-foreground))]">
                 <div className="flex items-center">
-                  <Clock className="h-3.5 w-3.5 mr-1 text-[hsl(var(--primary))]" />
+                  <Clock className="h-3.5 w-3.5 mr-1" />
                   <span>Thời gian hành trình: {formatDuration(durationMin)}</span>
                 </div>
                 {trip.Route?.distance_km && (
@@ -81,7 +81,7 @@ export default function TripCard({ trip }) {
             <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-4 border-t md:border-t-0 md:border-l border-[hsl(var(--border))] pt-4 md:pt-0 md:pl-6">
               <div className="flex flex-col md:items-end">
                 <span className="text-xs text-[hsl(var(--muted-foreground))]">Giá vé chỉ từ</span>
-                <span className="text-2xl font-extrabold text-[hsl(var(--primary))]">
+                <span className="text-2xl font-bold text-[hsl(var(--accent))]">
                   {formatCurrency(trip.price)}
                 </span>
               </div>

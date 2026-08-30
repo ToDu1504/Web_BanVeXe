@@ -1,24 +1,41 @@
 import React, { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { vehicleApi } from '@/api/vehicleApi'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, Bus, RefreshCw, Loader2, Info } from 'lucide-react'
+import TableSkeleton from '@/components/common/TableSkeleton'
+import EmptyState from '@/components/common/EmptyState'
+import { Pagination } from '@/components/ui/pagination'
+import ActiveStatus from '@/components/features/ActiveStatus'
+import { Search, Bus, RefreshCw, Info } from 'lucide-react'
 import { toast } from 'sonner'
+import { fadeInUp } from '@/lib/motionVariants'
 
 export default function ViewVehicles() {
   const [vehicles, setVehicles] = useState([])
-  const [filteredVehicles, setFilteredVehicles] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 400)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch])
 
   const fetchVehicles = async () => {
     try {
       setLoading(true)
-      const data = await vehicleApi.getAll()
-      setVehicles(data)
-      setFilteredVehicles(data)
+      const res = await vehicleApi.getAll({ page, limit: 10, search: debouncedSearch || undefined })
+      setVehicles(res.data)
+      setPagination(res.pagination)
     } catch (error) {
       toast.error('Không thể tải danh sách xe khách')
     } finally {
@@ -28,22 +45,7 @@ export default function ViewVehicles() {
 
   useEffect(() => {
     fetchVehicles()
-  }, [])
-
-  useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredVehicles(vehicles)
-    } else {
-      const q = searchQuery.toLowerCase()
-      setFilteredVehicles(
-        vehicles.filter(
-          (v) =>
-            v.license_plate?.toLowerCase().includes(q) ||
-            v.vehicle_type?.toLowerCase().includes(q)
-        )
-      )
-    }
-  }, [searchQuery, vehicles])
+  }, [page, debouncedSearch])
 
   const vehicleTypeLabels = {
     sleeper: 'Xe giường nằm (Sleeper)',
@@ -52,12 +54,12 @@ export default function ViewVehicles() {
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div initial="hidden" animate="show" variants={fadeInUp} className="space-y-6">
       <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <div>
-            <CardTitle className="text-xl font-bold flex items-center gap-2 text-[hsl(var(--primary))]">
-              <Bus className="h-5 w-5" />
+            <CardTitle className="text-xl font-semibold tracking-tight flex items-center gap-2">
+              <Bus className="h-5 w-5 text-[hsl(var(--primary))]" />
               Tra Cứu Phương Tiện Xe Khách
             </CardTitle>
             <CardDescription>
@@ -81,13 +83,8 @@ export default function ViewVehicles() {
           </div>
 
           {loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <div className="flex flex-col items-center space-y-4">
-                <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
-                <p className="text-sm text-[hsl(var(--muted-foreground))]">Đang tải danh sách xe...</p>
-              </div>
-            </div>
-          ) : filteredVehicles.length > 0 ? (
+            <TableSkeleton rows={5} columns={5} />
+          ) : vehicles.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -99,21 +96,21 @@ export default function ViewVehicles() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredVehicles.map((vehicle) => (
+                {vehicles.map((vehicle) => (
                   <TableRow key={vehicle.id}>
                     <TableCell className="font-bold text-sm tracking-wide">
                       <div className="flex items-center gap-2">
-                        <span className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 px-2 py-1 rounded text-xs">
+                        <span className="bg-[hsl(var(--muted))] text-[hsl(var(--foreground))] border border-[hsl(var(--border))] px-2 py-1 rounded font-mono text-xs">
                           {vehicle.license_plate}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell className="text-xs font-semibold">{vehicleTypeLabels[vehicle.vehicle_type] || vehicle.vehicle_type}</TableCell>
-                    <TableCell className="text-xs font-bold text-blue-600 dark:text-blue-400">{vehicle.total_seats} ghế</TableCell>
+                    <TableCell className="text-xs font-bold text-[hsl(var(--primary))]">{vehicle.total_seats} ghế</TableCell>
                     <TableCell className="text-[11px] text-[hsl(var(--muted-foreground))]">
                       {vehicle.seat_layout ? (
                         <div className="flex items-center gap-1">
-                          <Info className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                          <Info className="h-3.5 w-3.5 shrink-0" />
                           <span>
                             Số tầng: {vehicle.seat_layout.floors || 1} | Hàng: {vehicle.seat_layout.rows || 0} | Cột: {vehicle.seat_layout.cols || 0}
                           </span>
@@ -123,25 +120,18 @@ export default function ViewVehicles() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        vehicle.is_active
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                      }`}>
-                        {vehicle.is_active ? 'HOẠT ĐỘNG' : 'BẢO TRÌ/KHÓA'}
-                      </span>
+                      <ActiveStatus isActive={vehicle.is_active} />
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">
-              Không tìm thấy phương tiện nào phù hợp.
-            </div>
+            <EmptyState icon={Bus} title="Không tìm thấy phương tiện nào phù hợp." />
           )}
+          <Pagination pagination={pagination} onPageChange={setPage} />
         </CardContent>
       </Card>
-    </div>
+    </motion.div>
   )
 }

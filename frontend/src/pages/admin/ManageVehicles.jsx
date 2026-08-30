@@ -1,19 +1,36 @@
 import React, { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { vehicleApi } from '@/api/vehicleApi'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FormField } from '@/components/ui/form-field'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import PageHeader from '@/components/common/PageHeader'
+import TableSkeleton from '@/components/common/TableSkeleton'
+import EmptyState from '@/components/common/EmptyState'
+import { Pagination } from '@/components/ui/pagination'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod'
 import { Plus, Edit2, Trash2, Bus, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import SeatMap from '@/components/features/SeatMap'
+import { fadeInUp } from '@/lib/motionVariants'
 
 const vehicleSchema = zod.object({
   license_plate: zod.string().regex(/^[0-9]{2}[A-Z]-[0-9]{4,5}$/, 'Biển số xe phải đúng định dạng (Ví dụ: 29B-12345 hoặc 51A-9999)'),
@@ -32,6 +49,8 @@ const vehicleSchema = zod.object({
 
 export default function ManageVehicles() {
   const [vehicles, setVehicles] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
 
   // Dialog State
@@ -106,8 +125,9 @@ export default function ManageVehicles() {
   const fetchVehicles = async () => {
     try {
       setLoading(true)
-      const data = await vehicleApi.getAll()
-      setVehicles(data)
+      const res = await vehicleApi.getAll({ page, limit: 10 })
+      setVehicles(res.data)
+      setPagination(res.pagination)
     } catch (error) {
       toast.error('Không thể tải danh sách phương tiện xe')
     } finally {
@@ -117,7 +137,7 @@ export default function ManageVehicles() {
 
   useEffect(() => {
     fetchVehicles()
-  }, [])
+  }, [page])
 
   const handleOpenAdd = () => {
     setEditingVehicle(null)
@@ -142,8 +162,6 @@ export default function ManageVehicles() {
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa phương tiện này?')) return
-
     try {
       await vehicleApi.delete(id)
       toast.success('Xóa xe thành công!')
@@ -186,24 +204,22 @@ export default function ManageVehicles() {
   }
 
   return (
-    <div className="space-y-6">
-      
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Quản Lý Phương Tiện Vận Chuyển</h2>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">Đăng ký và điều khiển danh sách xe khách hoạt động trên hệ thống.</p>
-        </div>
-        <Button onClick={handleOpenAdd} className="font-semibold h-10 shrink-0">
-          <Plus className="h-4.5 w-4.5 mr-1.5" /> Thêm Phương Tiện
-        </Button>
-      </div>
+    <motion.div initial="hidden" animate="show" variants={fadeInUp} className="space-y-6">
+
+      <PageHeader
+        title="Quản Lý Phương Tiện Vận Chuyển"
+        description="Đăng ký và điều khiển danh sách xe khách hoạt động trên hệ thống."
+        action={
+          <Button onClick={handleOpenAdd} className="font-semibold h-10 shrink-0">
+            <Plus className="h-4.5 w-4.5 mr-1.5" /> Thêm Phương Tiện
+          </Button>
+        }
+      />
 
       <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm">
         <CardContent className="pt-6">
           {loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))]" />
-            </div>
+            <TableSkeleton rows={5} columns={6} />
           ) : vehicles.length > 0 ? (
             <Table>
               <TableHeader>
@@ -232,18 +248,35 @@ export default function ManageVehicles() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleOpenEdit(v)}
-                          className="h-8 w-8 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                          className="h-8 w-8"
                         >
                           <Edit2 className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(v.id)}
-                          className="h-8 w-8 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)]"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Xóa phương tiện V-{v.id}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Xe biển số {v.license_plate} sẽ bị xóa khỏi hệ thống. Hành động này không thể hoàn tác.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Đóng</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(v.id)}>
+                                Xác nhận xóa
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -251,10 +284,9 @@ export default function ManageVehicles() {
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-12 text-[hsl(var(--muted-foreground))]">
-              Chưa đăng ký phương tiện xe nào trên hệ thống.
-            </div>
+            <EmptyState icon={Bus} title="Chưa đăng ký phương tiện xe nào trên hệ thống." />
           )}
+          <Pagination pagination={pagination} onPageChange={setPage} className="mt-4" />
         </CardContent>
       </Card>
 
@@ -272,22 +304,17 @@ export default function ManageVehicles() {
 
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="space-y-4 my-3 text-sm">
-              
-              {/* License Plate */}
-              <div className="space-y-1.5">
-                <Label htmlFor="license_plate">Biển số xe</Label>
+
+              <FormField label="Biển số xe" htmlFor="license_plate" error={errors.license_plate?.message}>
                 <Input
                   id="license_plate"
                   placeholder="29B-12345"
                   {...register('license_plate')}
-                  className={errors.license_plate ? 'border-red-500' : ''}
+                  className={errors.license_plate ? 'border-[hsl(var(--destructive))]' : ''}
                 />
-                {errors.license_plate && <p className="text-xs text-red-500">{errors.license_plate.message}</p>}
-              </div>
+              </FormField>
 
-              {/* Vehicle Type */}
-              <div className="space-y-1.5">
-                <Label htmlFor="vehicle_type">Loại phương tiện</Label>
+              <FormField label="Loại phương tiện" htmlFor="vehicle_type">
                 <Select
                   value={watch('vehicle_type')}
                   onValueChange={(val) => setValue('vehicle_type', val)}
@@ -301,34 +328,28 @@ export default function ManageVehicles() {
                     <SelectItem value="standard">Xe ghế ngồi thường (Standard)</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </FormField>
 
-              {/* Total Seats */}
-              <div className="space-y-1.5">
-                <Label htmlFor="total_seats">Tổng số ghế bán</Label>
+              <FormField label="Tổng số ghế bán" htmlFor="total_seats" error={errors.total_seats?.message}>
                 <Input
                   id="total_seats"
                   type="number"
                   {...register('total_seats')}
-                  className={errors.total_seats ? 'border-red-500' : ''}
+                  className={errors.total_seats ? 'border-[hsl(var(--destructive))]' : ''}
                 />
-                {errors.total_seats && <p className="text-xs text-red-500">{errors.total_seats.message}</p>}
-              </div>
+              </FormField>
 
-              {/* Seat Layout (JSON Text) */}
-              <div className="space-y-1.5">
-                <Label htmlFor="seat_layout_str">Cấu trúc sơ đồ ghế (JSON Format)</Label>
+              <FormField label="Cấu trúc sơ đồ ghế (JSON Format)" htmlFor="seat_layout_str" error={errors.seat_layout_str?.message}>
                 <Input
                   id="seat_layout_str"
                   placeholder='{"floors":2,"rows":6,"cols":3}'
                   {...register('seat_layout_str')}
-                  className={errors.seat_layout_str ? 'border-red-500 font-mono text-xs' : 'font-mono text-xs'}
+                  className={errors.seat_layout_str ? 'border-[hsl(var(--destructive))] font-mono text-xs' : 'font-mono text-xs'}
                 />
-                {errors.seat_layout_str && <p className="text-xs text-red-500">{errors.seat_layout_str.message}</p>}
                 <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
                   * Nhập cấu hình: floors (số tầng), rows (số hàng ghế), cols (số cột ghế).
                 </p>
-              </div>
+              </FormField>
 
               {/* Live Seat Map Preview */}
               <div className="space-y-1.5">
@@ -362,6 +383,6 @@ export default function ManageVehicles() {
         </DialogContent>
       </Dialog>
 
-    </div>
+    </motion.div>
   )
 }

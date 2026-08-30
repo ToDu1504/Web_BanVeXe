@@ -14,7 +14,9 @@ export const authApi = {
     return response.data
   },
   getMe: async () => {
-    const response = await axiosInstance.get('/auth/me')
+    // skipAuthRedirect: khách vãng lai luôn nhận 401 ở đây khi vừa vào trang — đây là
+    // trạng thái bình thường, không phải phiên hết hạn nên không được ép về /login.
+    const response = await axiosInstance.get('/auth/me', { skipAuthRedirect: true })
     return response.data
   },
   updateProfile: async (profileData) => {
