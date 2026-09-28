@@ -21,6 +21,7 @@ import {
   Menu,
   Ticket,
   Repeat,
+  ClipboardList,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { authApi } from '@/api/authApi'
@@ -176,6 +177,12 @@ export default function AdminLayout({ children }) {
       title: 'Thống kê doanh thu',
       path: '/staff/stats',
       icon: BarChart3,
+      roles: ['staff', 'admin'],
+    },
+    {
+      title: 'Đối soát in vé',
+      path: '/staff/print-log',
+      icon: ClipboardList,
       roles: ['staff', 'admin'],
     },
   ].filter((item) => item.roles.includes(user?.role))

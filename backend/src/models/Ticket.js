@@ -49,6 +49,24 @@ const Ticket = sequelize.define('Ticket', {
     type: DataTypes.DATE,
     allowNull: true,
   },
+  // Denormalized "last print" cache — mirrors the most recent TicketPrint row
+  // so the UI can show issue status without an extra query. TicketPrint is
+  // the source of truth for full history (needed for shift reconciliation);
+  // these three columns must be updated in the same transaction as every
+  // TicketPrint.create, same pattern as active_seat_number above.
+  issued_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  issued_by: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  print_count: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+  },
 }, {
   tableName: 'tickets',
   timestamps: true,

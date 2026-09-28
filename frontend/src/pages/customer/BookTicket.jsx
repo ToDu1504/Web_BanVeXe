@@ -8,11 +8,12 @@ import { useBooking } from '@/hooks/useBooking'
 import { useAuth } from '@/hooks/useAuth'
 import { invoiceApi } from '@/api/invoiceApi'
 import { paymentApi } from '@/api/paymentApi'
+import { userApi } from '@/api/userApi'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/form-field'
-import { Bus, MapPin, Calendar, Clock, CreditCard, Banknote, ArrowRight, Loader2 } from 'lucide-react'
+import { Bus, MapPin, Calendar, Clock, CreditCard, Banknote, ArrowRight, Loader2, UserSearch, Check, X } from 'lucide-react'
 import { formatCurrency, formatDateTime, formatDuration } from '@/lib/utils'
 import { toast } from 'sonner'
 import { staggerContainer, fadeInUp } from '@/lib/motionVariants'
@@ -33,6 +34,65 @@ export default function BookTicket() {
   const { selectedTrip, selectedSeats, resetBooking } = useBooking()
   const [submitting, setSubmitting] = useState(false)
   const [bookingSuccess, setBookingSuccess] = useState(false)
+
+  // Nhân viên/quản trị viên đặt vé hộ khách: hóa đơn phải gắn vào tài khoản
+  // khách hàng thật (tìm hoặc tạo theo SĐT), không phải tài khoản của người
+  // đang thao tác. Khách hàng tự đặt vé bỏ qua toàn bộ khối này.
+  const isStaffBooking = user?.role === 'staff' || user?.role === 'admin'
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [customerSearchResults, setCustomerSearchResults] = useState(null)
+  const [searchingCustomer, setSearchingCustomer] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [newCustomerName, setNewCustomerName] = useState('')
+  const [newCustomerEmail, setNewCustomerEmail] = useState('')
+  const [creatingCustomer, setCreatingCustomer] = useState(false)
+
+  const handleSearchCustomer = async () => {
+    if (customerPhone.trim().length < 3) {
+      toast.warning('Vui lòng nhập ít nhất 3 số điện thoại.')
+      return
+    }
+    setSearchingCustomer(true)
+    setSelectedCustomer(null)
+    try {
+      const results = await userApi.searchCustomers(customerPhone.trim())
+      setCustomerSearchResults(results)
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Có lỗi khi tìm khách hàng')
+    } finally {
+      setSearchingCustomer(false)
+    }
+  }
+
+  const handleCreateCustomer = async () => {
+    if (newCustomerName.trim().length < 2) {
+      toast.warning('Vui lòng nhập họ tên khách hàng.')
+      return
+    }
+    setCreatingCustomer(true)
+    try {
+      const customer = await userApi.resolveOrCreateCustomer({
+        full_name: newCustomerName.trim(),
+        phone: customerPhone.trim(),
+        email: newCustomerEmail.trim() || undefined,
+      })
+      setSelectedCustomer(customer)
+      setCustomerSearchResults(null)
+      toast.success(`Đã tạo tài khoản khách hàng mới: ${customer.full_name}`)
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Có lỗi khi tạo tài khoản khách hàng')
+    } finally {
+      setCreatingCustomer(false)
+    }
+  }
+
+  const handleResetCustomer = () => {
+    setSelectedCustomer(null)
+    setCustomerSearchResults(null)
+    setCustomerPhone('')
+    setNewCustomerName('')
+    setNewCustomerEmail('')
+  }
 
   // Redirect if no trip/seats selected (skip once booking has just succeeded,
   // since resetBooking() also clears selectedTrip/selectedSeats)
@@ -71,6 +131,11 @@ export default function BookTicket() {
   const totalPrice = selectedSeats.length * selectedTrip.price
 
   const onSubmit = async (data) => {
+    if (isStaffBooking && !selectedCustomer) {
+      toast.warning('Vui lòng tìm hoặc tạo tài khoản khách hàng nhận vé trước khi đặt.')
+      return
+    }
+
     setSubmitting(true)
     try {
       // Map passenger form details back to tickets format for API
@@ -86,6 +151,7 @@ export default function BookTicket() {
         total_price: totalPrice,
         payment_method: data.paymentMethod,
         tickets,
+        ...(isStaffBooking && selectedCustomer ? { customer_id: selectedCustomer.id } : {}),
       })
 
       setBookingSuccess(true) // Prevent the "missing trip/seats" guard from firing on reset
@@ -136,6 +202,88 @@ export default function BookTicket() {
           className="lg:col-span-8 space-y-6"
         >
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+
+            {/* Đặt vé hộ khách — chỉ hiện với nhân viên/quản trị viên */}
+            {isStaffBooking && (
+              <Card className="border border-[hsl(var(--border))]">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <UserSearch className="h-5 w-5 text-[hsl(var(--primary))]" />
+                    Khách hàng nhận vé
+                  </CardTitle>
+                  <CardDescription>
+                    Tìm tài khoản khách hàng theo số điện thoại, hoặc tạo mới nếu khách chưa có tài khoản.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {selectedCustomer ? (
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--success))] bg-[hsl(var(--success)/0.08)]">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Check className="h-4 w-4 text-[hsl(var(--success))]" />
+                        <span className="font-semibold">{selectedCustomer.full_name}</span>
+                        <span className="text-[hsl(var(--muted-foreground))]">— {selectedCustomer.phone}</span>
+                      </div>
+                      <Button type="button" variant="ghost" size="sm" onClick={handleResetCustomer}>
+                        <X className="h-3.5 w-3.5 mr-1" /> Đổi khách khác
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Nhập số điện thoại khách hàng..."
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                        />
+                        <Button type="button" onClick={handleSearchCustomer} disabled={searchingCustomer}>
+                          {searchingCustomer ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Tìm khách'}
+                        </Button>
+                      </div>
+
+                      {customerSearchResults && customerSearchResults.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-[hsl(var(--muted-foreground))]">Chọn tài khoản khách hàng phù hợp:</p>
+                          {customerSearchResults.map((c) => (
+                            <button
+                              type="button"
+                              key={c.id}
+                              onClick={() => { setSelectedCustomer(c); setCustomerSearchResults(null) }}
+                              className="w-full text-left p-2.5 rounded-lg border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted)/0.5)] text-sm"
+                            >
+                              <span className="font-semibold">{c.full_name}</span>
+                              <span className="text-[hsl(var(--muted-foreground))]"> — {c.phone} — {c.email}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {customerSearchResults && customerSearchResults.length === 0 && (
+                        <div className="space-y-3 p-3 rounded-lg border border-dashed border-[hsl(var(--border))]">
+                          <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                            Không tìm thấy khách hàng với số điện thoại này. Nhập thông tin để tạo tài khoản mới:
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <Input
+                              placeholder="Họ tên khách hàng"
+                              value={newCustomerName}
+                              onChange={(e) => setNewCustomerName(e.target.value)}
+                            />
+                            <Input
+                              placeholder="Email (tùy chọn)"
+                              value={newCustomerEmail}
+                              onChange={(e) => setNewCustomerEmail(e.target.value)}
+                            />
+                          </div>
+                          <Button type="button" size="sm" onClick={handleCreateCustomer} disabled={creatingCustomer}>
+                            {creatingCustomer ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Tạo khách mới & đặt vé'}
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Passenger Forms */}
             <Card className="border border-[hsl(var(--border))]">
@@ -243,7 +391,14 @@ export default function BookTicket() {
                   <span className="text-xs text-[hsl(var(--muted-foreground))]">Tổng cộng ({selectedSeats.length} vé)</span>
                   <span className="text-lg font-bold text-[hsl(var(--primary))]">{formatCurrency(totalPrice)}</span>
                 </div>
-                <Button type="submit" variant="accent" size="lg" className="w-44 font-semibold" disabled={submitting}>
+                <Button
+                  type="submit"
+                  variant="accent"
+                  size="lg"
+                  className="w-44 font-semibold"
+                  disabled={submitting || (isStaffBooking && !selectedCustomer)}
+                  title={isStaffBooking && !selectedCustomer ? 'Vui lòng chọn khách hàng nhận vé trước' : undefined}
+                >
                   {submitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

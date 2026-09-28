@@ -26,12 +26,29 @@ const invoiceController = {
   create: async (req, res) => {
     const t = await sequelize.transaction()
     try {
-      const { payment_method, tickets } = req.body
-      const userId = req.user.id
+      const { payment_method, tickets, customer_id } = req.body
 
       if (!tickets || tickets.length === 0) {
         await t.rollback()
         return res.status(400).json({ message: 'Danh sách vé đặt không được để trống.' })
+      }
+
+      // Ai là chủ hóa đơn: mặc định là người gọi API. Nhân viên/quản trị viên
+      // đặt vé hộ khách có thể chỉ định customer_id để hóa đơn gắn đúng vào
+      // khách hàng thật thay vì vào tài khoản của chính họ. Khách hàng thường
+      // không được phép gán hóa đơn cho người khác.
+      let userId = req.user.id
+      if (customer_id) {
+        if (!['staff', 'admin'].includes(req.user.role)) {
+          await t.rollback()
+          return res.status(403).json({ message: 'Bạn không có quyền đặt vé cho tài khoản khác.' })
+        }
+        const targetCustomer = await User.findByPk(customer_id, { transaction: t })
+        if (!targetCustomer) {
+          await t.rollback()
+          return res.status(404).json({ message: 'Không tìm thấy tài khoản khách hàng được chỉ định.' })
+        }
+        userId = targetCustomer.id
       }
 
       // Load the trips referenced by the tickets and lock their rows for the

@@ -17,11 +17,11 @@ bus-ticket-system/
 │   │   │   └── momo.config.js  # [MỚI] Credentials sandbox cổng thanh toán MoMo
 │   │   ├── controllers/
 │   │   │   ├── authController.js
-│   │   │   ├── userController.js
-│   │   │   ├── invoiceController.js
-│   │   │   ├── ticketController.js  # [MỚI] Tách riêng từ invoice
+│   │   │   ├── userController.js   # [MỚI] + searchCustomers/resolveOrCreateCustomer (tìm/tạo khách theo SĐT cho đặt vé hộ)
+│   │   │   ├── invoiceController.js  # [MỚI] create nhận thêm customer_id (staff/admin đặt vé hộ đúng chủ)
+│   │   │   ├── ticketController.js  # [MỚI] Tách riêng từ invoice; + printTicket/getPrintHistory/getPrintLog (quầy vé)
 │   │   │   ├── routeController.js
-│   │   │   ├── tripController.js
+│   │   │   ├── tripController.js   # [MỚI] + getPassengers (danh sách khách theo chuyến), sort/lọc theo thời gian
 │   │   │   ├── tripTemplateController.js  # [MỚI] CRUD mẫu chuyến lặp lại + generate-now
 │   │   │   ├── vehicleController.js
 │   │   │   ├── statsController.js
@@ -38,7 +38,8 @@ bus-ticket-system/
 │   │   ├── models/
 │   │   │   ├── User.js
 │   │   │   ├── Invoice.js      # 1 lần thanh toán (1-N với Ticket)
-│   │   │   ├── Ticket.js       # [MỚI] 1 ghế = 1 vé
+│   │   │   ├── Ticket.js       # [MỚI] 1 ghế = 1 vé; + issued_at/issued_by/print_count (cache lần in gần nhất)
+│   │   │   ├── TicketPrint.js  # [MỚI] Lịch sử đầy đủ mọi lần in vé (phục vụ đối soát cuối ca)
 │   │   │   ├── Route.js
 │   │   │   ├── Trip.js
 │   │   │   ├── TripTemplate.js # [MỚI] Mẫu chuyến lặp lại theo tuần
@@ -46,11 +47,11 @@ bus-ticket-system/
 │   │   │   └── index.js        # Đăng ký toàn bộ association
 │   │   ├── routes/
 │   │   │   ├── auth.routes.js
-│   │   │   ├── user.routes.js
+│   │   │   ├── user.routes.js  # [MỚI] + /customers/search, /customers (staff/admin, khai báo trước blanket admin-only)
 │   │   │   ├── invoice.routes.js
-│   │   │   ├── ticket.routes.js
+│   │   │   ├── ticket.routes.js  # [MỚI] + /:id/print, /:id/prints, /prints (quầy vé)
 │   │   │   ├── route.routes.js
-│   │   │   ├── trip.routes.js
+│   │   │   ├── trip.routes.js  # [MỚI] + /:id/tickets (danh sách khách theo chuyến)
 │   │   │   ├── tripTemplate.routes.js  # [MỚI] /api/trip-templates
 │   │   │   ├── vehicle.routes.js
 │   │   │   ├── stats.routes.js
@@ -74,19 +75,20 @@ bus-ticket-system/
     │   │   ├── axiosInstance.js
     │   │   ├── authApi.js
     │   │   ├── invoiceApi.js
-    │   │   ├── ticketApi.js
-    │   │   ├── tripApi.js
+    │   │   ├── ticketApi.js    # [MỚI] + printTicket/getPrintHistory/getPrintLog
+    │   │   ├── tripApi.js      # [MỚI] + getPassengers (danh sách khách theo chuyến)
     │   │   ├── tripTemplateApi.js  # [MỚI] CRUD mẫu chuyến lặp lại + generateNow()
     │   │   ├── routeApi.js
     │   │   ├── vehicleApi.js
-    │   │   ├── userApi.js
+    │   │   ├── userApi.js      # [MỚI] + searchCustomers/resolveOrCreateCustomer
     │   │   ├── statsApi.js
     │   │   └── paymentApi.js   # [MỚI] Khởi tạo & xác thực thanh toán MoMo
     │   ├── components/
     │   │   ├── common/         # Navbar, Footer, AdminLayout, PageLayout...
     │   │   │   └── SmoothScrollProvider.jsx  # [MỚI] Lenis smooth-scroll + GSAP ScrollTrigger
     │   │   ├── ui/             # [shadcn/ui] Button, Input, Table, Badge, Dialog, Select...
-    │   │   │   └── pagination.jsx  # [MỚI] Component phân trang dùng chung (tự viết, không phải shadcn)
+    │   │   │   ├── pagination.jsx  # [MỚI] Component phân trang dùng chung (tự viết, không phải shadcn)
+    │   │   │   └── textarea.jsx    # [MỚI] Tự viết theo style input.jsx (dùng cho ô nhập lý do in lại)
     │   │   └── features/       # Feature-specific components
     │   │       ├── SeatMap.jsx         # Sơ đồ ghế tương tác
     │   │       ├── TripCard.jsx        # Card chuyến xe (Framer Motion)
@@ -94,7 +96,9 @@ bus-ticket-system/
     │   │       ├── TripStatus.jsx      # [MỚI] Badge trạng thái chuyến xe
     │   │       ├── ActiveStatus.jsx    # [MỚI] Badge kích hoạt/vô hiệu hóa (user, route, vehicle...)
     │   │       ├── StatCard.jsx        # [MỚI] Thẻ KPI đếm số chạy (GSAP `useGSAP`)
-    │   │       └── StatsChart.jsx      # Biểu đồ (Recharts)
+    │   │       ├── StatsChart.jsx      # Biểu đồ (Recharts)
+    │   │       ├── TicketPrintView.jsx     # [MỚI] Phiếu vé in cho từng khách (QR code, cảnh báo "IN LẠI")
+    │   │       └── TripPassengersDialog.jsx # [MỚI] Danh sách khách theo chuyến + in phiếu điểm danh cho phụ xe
     │   ├── pages/
     │   │   ├── auth/
     │   │   │   ├── Login.jsx
@@ -111,16 +115,17 @@ bus-ticket-system/
     │   │   │   ├── Profile.jsx
     │   │   │   └── PaymentReturn.jsx    # [MỚI] Trang MoMo redirect về sau khi thanh toán
     │   │   ├── staff/
-    │   │   │   ├── ManageInvoice.jsx
+    │   │   │   ├── ManageInvoice.jsx  # [MỚI] + nút In vé/In lại vé (quầy vé)
     │   │   │   ├── Statistics.jsx
-    │   │   │   ├── ViewTrips.jsx
+    │   │   │   ├── ViewTrips.jsx      # [MỚI] + lọc "Khoảng thời gian", nhãn "Sắp khởi hành", nút Danh sách khách
     │   │   │   ├── ViewRoutes.jsx
-    │   │   │   └── ViewVehicles.jsx
+    │   │   │   ├── ViewVehicles.jsx
+    │   │   │   └── PrintReconciliation.jsx  # [MỚI] Đối soát in vé (/staff/print-log)
     │   │   └── admin/
     │   │       ├── Dashboard.jsx       # [MỚI] Tổng quan Admin
     │   │       ├── ManageUsers.jsx
     │   │       ├── ManageRoutes.jsx
-    │   │       ├── ManageTrips.jsx
+    │   │       ├── ManageTrips.jsx     # [MỚI] + nút Danh sách khách (dùng chung TripPassengersDialog với staff)
     │   │       ├── ManageTripTemplates.jsx  # [MỚI] Mẫu chuyến lặp lại + nút "Tạo Chuyến Ngay"
     │   │       └── ManageVehicles.jsx
     │   ├── store/
@@ -156,6 +161,7 @@ Chạy lần lượt các lệnh SQL sau:
 > - `invoices` = 1 lần thanh toán (có thể chứa nhiều vé).
 > - `tickets` = 1 ghế cụ thể (quan hệ N-1 với `invoices`).
 > - `UNIQUE(trip_id, active_seat_number)` ngăn chặn **double booking** ở tầng DB (chỉ áp dụng cho vé đang `booked`, vé `cancelled` có `active_seat_number = NULL` nên không chặn bán lại ghế).
+> - `ticket_prints` = lịch sử **mọi** lần in vé (không chỉ lần gần nhất) — `tickets.issued_at/issued_by/print_count` chỉ là cache để hiển thị nhanh, nguồn dữ liệu thật để đối soát cuối ca là bảng này.
 
 ```sql
 CREATE DATABASE bus_ticket_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -271,12 +277,31 @@ CREATE TABLE tickets (
     ticket_price    DECIMAL(10, 2)  NOT NULL,
     booking_status  ENUM('booked', 'cancelled') DEFAULT 'booked',
     cancelled_at    TIMESTAMP NULL,
+    issued_at       DATETIME NULL,   -- [MỚI] Thời điểm in gần nhất (cache — nguồn thật là ticket_prints)
+    issued_by       INT NULL,        -- [MỚI] Nhân viên in gần nhất (users.id)
+    print_count     INT NOT NULL DEFAULT 0,  -- [MỚI] Số lần đã in (>1 nghĩa là đã in lại)
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
     FOREIGN KEY (trip_id)    REFERENCES trips(id)    ON DELETE CASCADE,
     -- Chống double booking, chỉ tính vé đang 'booked': MySQL cho phép nhiều NULL
     -- trong UNIQUE KEY nên vé đã hủy (active_seat_number=NULL) không chặn bán lại ghế.
     UNIQUE KEY uq_trip_active_seat (trip_id, active_seat_number)
+);
+
+-- =============================================
+-- BẢNG LỊCH SỬ IN VÉ (mọi lần in, phục vụ đối soát cuối ca) [MỚI]
+-- =============================================
+CREATE TABLE ticket_prints (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    ticket_id       INT NOT NULL,
+    invoice_id      INT NOT NULL,        -- Denormalize từ ticket.invoice_id, tránh join thêm khi lọc báo cáo
+    printed_by      INT NOT NULL,        -- Nhân viên thực hiện in (users.id)
+    printed_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    print_type      ENUM('original', 'reprint') NOT NULL,
+    print_sequence  INT NOT NULL,        -- 1, 2, 3... = "in lại lần N"
+    reason          VARCHAR(255) NULL,   -- Bắt buộc (ở tầng controller) khi print_type = 'reprint'
+    FOREIGN KEY (ticket_id)  REFERENCES tickets(id) ON DELETE CASCADE,
+    FOREIGN KEY (printed_by) REFERENCES users(id)   ON DELETE CASCADE
 );
 
 -- =============================================
@@ -287,6 +312,9 @@ CREATE INDEX idx_trips_departure    ON trips(departure_time);
 CREATE INDEX idx_tickets_invoice    ON tickets(invoice_id);
 CREATE INDEX idx_tickets_trip       ON tickets(trip_id);
 CREATE INDEX idx_invoices_user      ON invoices(user_id);
+CREATE INDEX idx_ticket_prints_ticket        ON ticket_prints(ticket_id);
+CREATE INDEX idx_ticket_prints_printed_at    ON ticket_prints(printed_at);
+CREATE INDEX idx_ticket_prints_printed_by_at ON ticket_prints(printed_by, printed_at);
 ```
 
 ---
@@ -323,8 +351,16 @@ JWT_SECRET=your_jwt_secret_key
 JWT_EXPIRES_IN=7d
 CLIENT_URL=http://localhost:5173
 
-# Số phút giữ ghế tối đa cho hóa đơn 'pending' trước khi bị tự động hủy (mặc định: 30)
+# Số phút giữ ghế tối đa cho hóa đơn 'pending' trước khi bị tự động hủy — TTL này
+# chỉ áp dụng cho payment_method='momo' (bỏ giỏ hàng khi thanh toán online), mặc định: 30
 PENDING_INVOICE_TTL_MINUTES=30
+
+# TTL kép cho hóa đơn 'pending' payment_method='cash' (đặt online chọn trả tại quầy,
+# hoặc nhân viên đặt hộ) — được giữ LÂU HƠN để khách có thời gian ra quầy trả tiền,
+# nhưng không giữ quá CASH_HOLD_DEPARTURE_BUFFER_MINUTES trước giờ khởi hành dù chưa
+# hết CASH_HOLD_TTL_MINUTES (tránh giữ ghế vô ích khi khách rõ ràng không đến kịp).
+CASH_HOLD_TTL_MINUTES=120
+CASH_HOLD_DEPARTURE_BUFFER_MINUTES=30
 
 # Job sinh Trip từ TripTemplate: số ngày sinh trước (mặc định: 14) và chu kỳ chạy lại tính bằng ms (mặc định: 4 giờ)
 TRIP_TEMPLATE_ADVANCE_DAYS=14
@@ -366,16 +402,27 @@ MOMO_IPN_URL=http://localhost:8080/api/payments/momo/ipn
 | GET | `/api/trips/search` | Tìm kiếm chuyến xe | Public |
 | GET | `/api/trips/:id` | Chi tiết chuyến xe | Public |
 | GET | `/api/trips/:id/booked-seats` | [MỚI] Danh sách ghế đã đặt | Public |
+| GET | `/api/trips/:id/tickets` | [MỚI] Danh sách hành khách của chuyến (tên/SĐT/ghế/thanh toán/xuất vé, kể cả vé đã hủy) | Staff/Admin |
 
 #### 🎫 Invoices & Tickets
 
 | Method | Endpoint | Mô tả | Role |
 |--------|----------|-------|------|
-| POST | `/api/invoices` | Tạo hóa đơn + đặt nhiều vé (Transaction) | Customer/Staff/Admin |
+| POST | `/api/invoices` | Tạo hóa đơn + đặt nhiều vé (Transaction). Nhận thêm `customer_id` [MỚI] — chỉ staff/admin dùng được, để đặt vé hộ gắn đúng vào khách hàng thay vì tài khoản nhân viên | Customer/Staff/Admin |
 | GET | `/api/invoices/my` | Lịch sử hóa đơn của tôi | Customer |
 | GET | `/api/invoices/:id` | [MỚI] Chi tiết một hóa đơn | Chủ hóa đơn/Staff/Admin |
 | DELETE | `/api/invoices/:id` | Hủy toàn bộ hóa đơn | Customer/Staff/Admin |
 | DELETE | `/api/tickets/:id` | [MỚI] Hủy từng vé riêng lẻ | Customer/Staff/Admin |
+| POST | `/api/tickets/:id/print` | [MỚI] In vé (chỉ khi hóa đơn đã `paid`); in lại (`print_count > 0`) bắt buộc `reason` | Staff/Admin |
+| GET | `/api/tickets/:id/prints` | [MỚI] Lịch sử in của một vé | Staff/Admin |
+| GET | `/api/tickets/prints` | [MỚI] Báo cáo đối soát in vé theo `from`/`to`/`printed_by` — nhân viên chỉ xem được của chính mình (backend ép `printed_by`, bỏ qua tham số client gửi), admin xem được toàn bộ | Staff/Admin |
+
+#### 👤 Customer Lookup — Đặt vé hộ khách [MỚI]
+
+| Method | Endpoint | Mô tả | Role |
+|--------|----------|-------|------|
+| GET | `/api/users/customers/search?phone=` | Tìm tài khoản khách hàng theo SĐT (chỉ trả `role: 'customer'`) | Staff/Admin |
+| POST | `/api/users/customers` | Tìm hoặc tạo mới tài khoản khách hàng theo SĐT (409 nếu SĐT trùng tài khoản staff/admin) | Staff/Admin |
 
 #### 💳 Payments — MoMo Sandbox [MỚI]
 
@@ -409,7 +456,7 @@ MOMO_IPN_URL=http://localhost:8080/api/payments/momo/ipn
 
 | Method | Endpoint | Mô tả | Role |
 |--------|----------|-------|------|
-| GET | `/api/trips` | Danh sách chuyến xe | Staff/Admin |
+| GET | `/api/trips` | Danh sách chuyến xe — **[MỚI] mặc định sắp xếp `departure_time ASC`** (gần nhất trước), nhận thêm `from`/`to` [MỚI] để lọc theo khoảng thời gian khởi hành | Staff/Admin |
 | POST | `/api/trips` | Thêm chuyến xe | Admin |
 | PUT | `/api/trips/:id` | Sửa chuyến xe | Admin |
 | DELETE | `/api/trips/:id` | Xóa chuyến xe | Admin |
@@ -477,6 +524,7 @@ npm install react-hook-form zod @hookform/resolvers
 npm install lucide-react
 npm install date-fns
 npm install sonner
+npm install qrcode.react   # [MỚI] Mã QR trên phiếu vé in (TicketPrintView.jsx) — <QRCodeSVG>, chỉ để đối chiếu thủ công
 ```
 
 ### Cấu hình Tailwind CSS v4 (`vite.config.js`)
@@ -557,13 +605,17 @@ VITE_API_URL=http://localhost:8080/api
 | Trang chủ & Tìm kiếm chuyến xe | ✅ | ✅ | ✅ | ✅ |
 | Chi tiết chuyến xe (xem) | ✅ | ✅ | ✅ | ✅ |
 | Đăng ký / Đăng nhập | ✅ | ✅ | ✅ | ✅ |
-| Đặt vé & Chọn ghế (Nhân viên có thêm chức năng đặt hộ khách) | ❌ | ✅ | ✅ | ❌ |
+| Đặt vé & Chọn ghế (Nhân viên/Admin có thêm chức năng tìm/tạo tài khoản khách để đặt hộ đúng chủ) | ❌ | ✅ | ✅ | ✅ |
 | Hủy vé / Hủy hóa đơn | ❌ | ✅ | ✅ | ✅ |
 | Xem lịch sử hóa đơn (của tôi) | ❌ | ✅ | ❌ | ❌ |
 | Cập nhật thông tin cá nhân | ❌ | ✅ | ✅ | ✅ |
 | Quản lý hóa đơn & Hủy vé hộ khách | ❌ | ❌ | ✅ | ✅ |
 | Cập nhật trạng thái hóa đơn | ❌ | ❌ | ✅ | ✅ |
+| In vé / In lại vé (chỉ khi hóa đơn đã thanh toán) | ❌ | ❌ | ✅ | ✅ |
+| Đối soát in vé (chỉ xem lượt in của mình; Admin xem toàn bộ) | ❌ | ❌ | ✅ | ✅ |
 | Xem danh sách & sơ đồ ghế chuyến xe | ❌ | ❌ | ✅ | ✅ |
+| Xem & in danh sách hành khách theo chuyến (phiếu điểm danh cho phụ xe) | ❌ | ❌ | ✅ | ✅ |
+| Lọc chuyến xe theo khoảng thời gian sắp khởi hành | ❌ | ❌ | ✅ | ✅ |
 | Tra cứu tuyến xe / xe khách (Read-only) | ❌ | ❌ | ✅ | ✅ |
 | Thống kê & Báo cáo | ❌ | ❌ | ✅ | ✅ |
 | Quản lý tuyến xe / chuyến xe / xe (CRUD) | ❌ | ❌ | ❌ | ✅ |
@@ -639,6 +691,11 @@ npm run dev       # Vite dev server
 - **Xuất báo cáo CSV:** Nút "Xuất báo cáo" ở `staff/Statistics.jsx` dùng `exportToCsv()` (`frontend/src/lib/utils.js`) — tự thêm BOM UTF-8 + khai báo `sep=,` (để Excel bản tiếng Việt không tự đổi thành `;`) và tự đóng ngoặc kép các ô dạng ngày `dd-MM`/`dd/MM` để Excel không hiểu nhầm thành định dạng ngày kiểu Mỹ.
 - **Smooth scroll & scroll animation:** Toàn app được bọc trong `SmoothScrollProvider.jsx` (Lenis) để cuộn mượt trang public/customer; tự tắt trên các route `/admin` và `/staff` (vì `AdminLayout` tự cuộn nội bộ) và tự tắt hoàn toàn nếu trình duyệt bật `prefers-reduced-motion`. `StatCard.jsx` (Dashboard, Statistics) dùng GSAP để chạy hiệu ứng đếm số KPI.
 - **"Tuyến đường phổ biến" ở trang chủ:** Danh sách 3 thành phố × 3 điểm đến hiển thị ở `Home.jsx` lấy từ mảng `FEATURED_CITIES` viết cứng trong code (khớp theo đúng chuỗi điểm đi/điểm đến với các `Route` đã tải) — **không** dựa trên số liệu đặt vé thực tế và **không** có UI cấu hình cho Admin; muốn đổi tuyến nổi bật phải sửa trực tiếp mảng này.
+- **In vé & đối soát cuối ca (quầy vé) [MỚI]:** Vé chỉ in được sau khi hóa đơn đã `paid` (dialog chi tiết ở `ManageInvoice.jsx`, component `TicketPrintView.jsx` — có mã QR bằng `qrcode.react` để đối chiếu thủ công lúc lên xe, **không** có màn hình quét/soát vé trong hệ thống). Vé đã in trước đó bắt buộc nhập lý do khi in lại, tự đánh nhãn "BẢN IN LẠI — LẦN N". Mọi lượt in được ghi vào bảng `ticket_prints` (không chỉ cache `issued_at`/`print_count` trên `tickets`), xem lại tại trang "Đối soát in vé" (`/staff/print-log`) — nhân viên chỉ thấy lượt in của mình, Admin thấy toàn bộ và lọc được theo nhân viên.
+- **Đặt vé hộ khách gắn đúng chủ [MỚI]:** Trước đây nhân viên đặt vé hộ khách tại `/customer/book` khiến hóa đơn bị gắn vào chính tài khoản nhân viên. Nay `BookTicket.jsx` hiện thêm khối "Khách hàng nhận vé" (chỉ với role staff/admin): tìm khách theo SĐT (`GET /api/users/customers/search`) hoặc tạo nhanh tài khoản mới (`POST /api/users/customers`, email placeholder dạng `khach.<sđt>@quayve.local` nếu không nhập), rồi gửi `customer_id` khi tạo hóa đơn để hóa đơn thuộc về đúng khách hàng.
+- **Giữ ghế theo phương thức thanh toán (TTL kép) [MỚI]:** `expireInvoices.js` không còn dùng một TTL chung cho mọi hóa đơn `pending` — `momo` vẫn hủy sau `PENDING_INVOICE_TTL_MINUTES` (mặc định 30 phút, dọn giỏ hàng bỏ dở), còn `cash` (đặt online chọn trả tại quầy, hoặc nhân viên đặt hộ) được giữ tới `CASH_HOLD_TTL_MINUTES` (mặc định 120 phút) nhưng không giữ quá `CASH_HOLD_DEPARTURE_BUFFER_MINUTES` (mặc định 30 phút) trước giờ khởi hành dù chưa hết hạn.
+- **Danh sách hành khách theo chuyến [MỚI]:** `GET /api/trips/:id/tickets` (component `TripPassengersDialog.jsx`, dùng chung ở `staff/ViewTrips.jsx` và `admin/ManageTrips.jsx`) hiện đầy đủ tên/SĐT/ghế/trạng thái thanh toán/trạng thái xuất vé của từng hành khách trên một chuyến (kể cả vé đã hủy, đánh dấu mờ). Có nút in **phiếu điểm danh cho cả chuyến** (khác với vé xe từng khách) để phụ xe đối chiếu lúc lên xe — không giới hạn theo trạng thái thanh toán, có cột trống để tick tay. Phiếu in được portal thẳng ra `document.body` để tránh bị cắt bởi vùng cuộn của dialog.
+- **Lọc chuyến xe sắp khởi hành [MỚI]:** `ViewTrips.jsx` (`/staff/trips`) nay sắp xếp mặc định theo giờ khởi hành gần nhất trước (trước đây bị ngược), có thêm bộ lọc "Khoảng thời gian" (2h/6h/hôm nay, dùng `from`/`to` trên `GET /api/trips`) và nhãn đỏ "Sắp khởi hành" cho chuyến trong vòng 2 giờ tới.
 - **shadcn/ui components đã cài (`frontend/src/components/ui/`):**
 
 ```bash
@@ -646,7 +703,7 @@ npx shadcn@latest add button input label form-field table badge card
 npx shadcn@latest add dialog alert-dialog dropdown-menu select tabs switch
 npx shadcn@latest add avatar skeleton sonner
 ```
-`pagination.jsx` trong cùng thư mục là component tự viết (không phải shadcn) — xem ghi chú cấu trúc dự án phía trên.
+`pagination.jsx` và `textarea.jsx` trong cùng thư mục là component tự viết (không phải shadcn) — xem ghi chú cấu trúc dự án phía trên.
 
 
 ## 🎨 PRD Thiết Kế Frontend
@@ -661,16 +718,17 @@ npx shadcn@latest add avatar skeleton sonner
 - **Profile:** Form cập nhật thông tin và đổi mật khẩu.
 
 #### Luồng Nhân Viên (Staff)
-- **Manage Invoices:** Bảng hóa đơn toàn hệ thống, filter đa chiều, cập nhật trạng thái thanh toán, hủy hóa đơn hoặc hủy vé riêng lẻ thay cho khách, tìm kiếm nâng cao theo tên/SĐT hành khách.
-- **View Trips:** Xem danh sách chuyến xe và sơ đồ ghế tương tác của từng chuyến (ghế trống/đã đặt) để nắm bắt thông tin và hỗ trợ hành khách.
+- **Manage Invoices:** Bảng hóa đơn toàn hệ thống, filter đa chiều, cập nhật trạng thái thanh toán, hủy hóa đơn hoặc hủy vé riêng lẻ thay cho khách, tìm kiếm nâng cao theo tên/SĐT hành khách. **[MỚI]** In vé/in lại vé (phiếu vé QR) ngay trong dialog chi tiết khi hóa đơn đã thanh toán.
+- **View Trips:** Xem danh sách chuyến xe và sơ đồ ghế tương tác của từng chuyến (ghế trống/đã đặt) để nắm bắt thông tin và hỗ trợ hành khách. **[MỚI]** Lọc theo khoảng thời gian sắp khởi hành (2h/6h/hôm nay), nhãn "Sắp khởi hành", và nút "Danh sách khách" xem + in phiếu điểm danh cho phụ xe.
 - **View Routes & Vehicles:** [MỚI] Tra cứu nhanh danh sách các tuyến đường vận chuyển và danh sách phương tiện xe khách hiện có trong hệ thống (chế độ Read-only).
-- **Book Ticket (At counter):** [MỚI] Đặt vé và chọn ghế trực tiếp tại quầy hoặc qua điện thoại thay cho khách hàng — dùng chung trang `customer/BookTicket.jsx` (route `/customer/book` cho phép cả `customer`/`staff`/`admin`), không phải trang riêng.
+- **Book Ticket (At counter):** [MỚI] Đặt vé và chọn ghế trực tiếp tại quầy hoặc qua điện thoại thay cho khách hàng — dùng chung trang `customer/BookTicket.jsx` (route `/customer/book` cho phép cả `customer`/`staff`/`admin`), không phải trang riêng. **[MỚI]** Khối "Khách hàng nhận vé" để tìm/tạo đúng tài khoản khách hàng theo SĐT, đảm bảo hóa đơn gắn vào khách chứ không phải tài khoản nhân viên.
+- **Print Reconciliation:** [MỚI] Trang "Đối soát in vé" (`/staff/print-log`) xem lại mọi lượt in vé theo khoảng ngày — chỉ thấy lượt in của chính mình.
 - **Statistics:** Biểu đồ doanh thu bằng Recharts (Line chart theo ngày, Bar chart theo tháng), thẻ KPI đếm số (GSAP) và nút xuất báo cáo CSV.
 
 #### Luồng Quản Trị (Admin)
 - **Dashboard:** Widget thống kê nhanh (tổng vé hôm nay, doanh thu tháng, chuyến đang chạy), biểu đồ mini, thẻ KPI đếm số (GSAP).
 - **Manage Routes:** CRUD tuyến đường với Dialog + Form shadcn/ui.
-- **Manage Trips:** CRUD chuyến xe, gán xe + tuyến.
+- **Manage Trips:** CRUD chuyến xe, gán xe + tuyến. **[MỚI]** Nút "Danh sách khách" xem + in phiếu điểm danh hành khách theo chuyến (dùng chung component với `staff/ViewTrips.jsx`).
 - **Manage Trip Templates:** [MỚI] CRUD mẫu chuyến lặp lại theo tuần (`route`, `vehicle`, giờ khởi hành, các thứ trong tuần) + nút "Tạo Chuyến Ngay" ép chạy job sinh Trip.
 - **Manage Vehicles:** CRUD phương tiện, cấu hình sơ đồ ghế (JSON).
 - **Manage Users:** Bảng người dùng, đổi role bằng Select, toggle trạng thái bằng Switch.

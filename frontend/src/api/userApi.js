@@ -21,4 +21,12 @@ export const userApi = {
     const response = await axiosInstance.delete(`/users/${id}`)
     return response.data
   },
+  searchCustomers: async (phone) => {
+    const response = await axiosInstance.get('/users/customers/search', { params: { phone } })
+    return response.data
+  },
+  resolveOrCreateCustomer: async (data) => {
+    const response = await axiosInstance.post('/users/customers', data)
+    return response.data
+  },
 }

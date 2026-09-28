@@ -15,6 +15,10 @@ export const tripApi = {
     const response = await axiosInstance.get(`/trips/${id}/booked-seats`)
     return response.data
   },
+  getPassengers: async (id) => {
+    const response = await axiosInstance.get(`/trips/${id}/tickets`)
+    return response.data
+  },
   // Admin endpoints
   getAll: async (params) => {
     const response = await axiosInstance.get('/trips', { params })

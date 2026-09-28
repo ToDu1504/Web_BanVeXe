@@ -8,14 +8,44 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import SeatMap from '@/components/features/SeatMap'
+import TripPassengersDialog from '@/components/features/TripPassengersDialog'
 import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
 import { Pagination } from '@/components/ui/pagination'
 import TripStatus from '@/components/features/TripStatus'
-import { CalendarDays, Search, Eye, Loader2, RefreshCw, Bus } from 'lucide-react'
+import { CalendarDays, Search, Eye, Loader2, RefreshCw, Bus, Users, Clock } from 'lucide-react'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import { fadeInUp } from '@/lib/motionVariants'
+
+// Ngưỡng coi là "sắp khởi hành" để đánh dấu nổi bật trên bảng, độc lập với
+// bộ lọc khoảng thời gian — một chuyến trong 2 giờ tới luôn đáng chú ý dù
+// nhân viên đang lọc "Hôm nay" hay "Tất cả".
+const URGENT_THRESHOLD_MS = 2 * 60 * 60 * 1000
+
+const TIME_WINDOWS = {
+  all: null,
+  '2h': 2 * 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
+  today: 'today',
+}
+
+function computeTimeRange(key) {
+  const window = TIME_WINDOWS[key]
+  if (!window) return {}
+  const from = new Date()
+  if (window === 'today') {
+    const to = new Date()
+    to.setHours(23, 59, 59, 999)
+    return { from: from.toISOString(), to: to.toISOString() }
+  }
+  return { from: from.toISOString(), to: new Date(from.getTime() + window).toISOString() }
+}
+
+function isUrgent(departureTime) {
+  const diff = new Date(departureTime).getTime() - Date.now()
+  return diff > 0 && diff < URGENT_THRESHOLD_MS
+}
 
 export default function ViewTrips() {
   const [trips, setTrips] = useState([])
@@ -27,12 +57,17 @@ export default function ViewTrips() {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [timeFilter, setTimeFilter] = useState('all')
 
   // SeatMap Dialog state
   const [selectedTrip, setSelectedTrip] = useState(null)
   const [bookedSeats, setBookedSeats] = useState([])
   const [loadingSeats, setLoadingSeats] = useState(false)
   const [seatMapOpen, setSeatMapOpen] = useState(false)
+
+  // Passenger list dialog state
+  const [passengersTripId, setPassengersTripId] = useState(null)
+  const [passengersOpen, setPassengersOpen] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 400)
@@ -41,12 +76,15 @@ export default function ViewTrips() {
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, statusFilter])
+  }, [debouncedSearch, statusFilter, timeFilter])
 
   const fetchTrips = async () => {
     try {
       setLoading(true)
-      const res = await tripApi.getAll({ page, limit: 10, search: debouncedSearch || undefined, status: statusFilter })
+      const { from, to } = computeTimeRange(timeFilter)
+      const res = await tripApi.getAll({
+        page, limit: 10, search: debouncedSearch || undefined, status: statusFilter, from, to,
+      })
       setTrips(res.data)
       setPagination(res.pagination)
     } catch (error) {
@@ -58,7 +96,12 @@ export default function ViewTrips() {
 
   useEffect(() => {
     fetchTrips()
-  }, [page, debouncedSearch, statusFilter])
+  }, [page, debouncedSearch, statusFilter, timeFilter])
+
+  const handleOpenPassengers = (trip) => {
+    setPassengersTripId(trip.id)
+    setPassengersOpen(true)
+  }
 
   const handleOpenSeatMap = async (trip) => {
     setSelectedTrip(trip)
@@ -119,6 +162,21 @@ export default function ViewTrips() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <span className="text-sm text-[hsl(var(--muted-foreground))] whitespace-nowrap">Khoảng thời gian:</span>
+              <Select value={timeFilter} onValueChange={setTimeFilter}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Lọc thời gian" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tất cả</SelectItem>
+                  <SelectItem value="2h">Trong 2 giờ tới</SelectItem>
+                  <SelectItem value="6h">Trong 6 giờ tới</SelectItem>
+                  <SelectItem value="today">Hôm nay</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Table list */}
@@ -134,7 +192,7 @@ export default function ViewTrips() {
                   <TableHead>Ghế trống</TableHead>
                   <TableHead>Giá vé</TableHead>
                   <TableHead>Trạng thái</TableHead>
-                  <TableHead className="text-right">Sơ đồ ghế</TableHead>
+                  <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -150,7 +208,14 @@ export default function ViewTrips() {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs">{formatDateTime(trip.departure_time)}</TableCell>
+                    <TableCell className="text-xs">
+                      {formatDateTime(trip.departure_time)}
+                      {trip.status === 'scheduled' && isUrgent(trip.departure_time) && (
+                        <div className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold text-[hsl(var(--destructive))] bg-[hsl(var(--destructive)/0.1)]">
+                          <Clock className="h-3 w-3" /> Sắp khởi hành
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="font-medium text-xs">{trip.Vehicle?.license_plate}</span>
@@ -172,14 +237,26 @@ export default function ViewTrips() {
                       <TripStatus status={trip.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleOpenSeatMap(trip)}
-                        className="h-8 w-8"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenPassengers(trip)}
+                          className="h-8 w-8"
+                          title="Danh sách khách"
+                        >
+                          <Users className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenSeatMap(trip)}
+                          className="h-8 w-8"
+                          title="Sơ đồ ghế"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -242,6 +319,8 @@ export default function ViewTrips() {
           )}
         </DialogContent>
       </Dialog>
+
+      <TripPassengersDialog open={passengersOpen} onOpenChange={setPassengersOpen} tripId={passengersTripId} />
     </motion.div>
   )
 }

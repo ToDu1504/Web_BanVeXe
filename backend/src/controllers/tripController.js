@@ -103,12 +103,42 @@ const tripController = {
     }
   },
 
-  // @desc    Get all trips (Admin/Staff) — paginated when `page` is provided
-  // @route   GET /api/trips?page=&limit=&search=&status=
+  // @desc    Danh sách hành khách (kèm trạng thái thanh toán & xuất vé) của
+  //          một chuyến xe cụ thể — phục vụ nhân viên chuẩn bị chuyến chạy.
+  //          Trả về cả vé đã hủy (đánh dấu rõ) để không gây hiểu lầm về sức
+  //          chứa còn lại của chuyến.
+  // @route   GET /api/trips/:id/tickets
+  // @access  Private/Staff/Admin
+  getPassengers: async (req, res) => {
+    try {
+      const trip = await Trip.findByPk(req.params.id, { include: [Route, Vehicle] })
+      if (!trip) {
+        return res.status(404).json({ message: 'Không tìm thấy chuyến xe.' })
+      }
+
+      const tickets = await Ticket.findAll({
+        where: { trip_id: req.params.id },
+        include: [{ model: Invoice, attributes: ['id', 'payment_status', 'payment_method'] }],
+        order: [['seat_number', 'ASC']],
+      })
+
+      return res.status(200).json({ trip, tickets })
+    } catch (error) {
+      console.error('Lỗi getPassengers:', error)
+      return res.status(500).json({ message: 'Lỗi máy chủ khi tải danh sách hành khách.' })
+    }
+  },
+
+  // @desc    Get all trips (Admin/Staff) — paginated when `page` is provided.
+  //          Sorted soonest-departure-first by default so staff preparing for
+  //          an upcoming trip see it at the top instead of buried behind
+  //          trips departing weeks out. Optional `from`/`to` narrows to a
+  //          departure-time window (e.g. "trips leaving in the next 2h").
+  // @route   GET /api/trips?page=&limit=&search=&status=&from=&to=
   // @access  Private/Staff/Admin
   getAll: async (req, res) => {
     try {
-      const { search, status } = req.query
+      const { search, status, from, to } = req.query
       const andConditions = []
       if (search) {
         andConditions.push({
@@ -122,9 +152,17 @@ const tripController = {
       if (status && status !== 'all') {
         andConditions.push({ status })
       }
+      if (from || to) {
+        andConditions.push({
+          departure_time: {
+            ...(from ? { [Op.gte]: new Date(from) } : {}),
+            ...(to ? { [Op.lte]: new Date(to) } : {}),
+          },
+        })
+      }
       const where = andConditions.length > 0 ? { [Op.and]: andConditions } : {}
       const include = [Route, Vehicle]
-      const order = [['departure_time', 'DESC']]
+      const order = [['departure_time', 'ASC']]
 
       if (!req.query.page) {
         const trips = await Trip.findAll({ where, include, order })

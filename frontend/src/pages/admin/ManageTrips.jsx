@@ -26,10 +26,11 @@ import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
 import { Pagination } from '@/components/ui/pagination'
 import TripStatus from '@/components/features/TripStatus'
+import TripPassengersDialog from '@/components/features/TripPassengersDialog'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod'
-import { Plus, Edit2, Trash2, CalendarDays, Loader2, ArrowRight, RefreshCw, Search } from 'lucide-react'
+import { Plus, Edit2, Trash2, CalendarDays, Loader2, ArrowRight, RefreshCw, Search, Users } from 'lucide-react'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import { fadeInUp } from '@/lib/motionVariants'
@@ -59,6 +60,10 @@ export default function ManageTrips() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTrip, setEditingTrip] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+
+  // Passenger list dialog state
+  const [passengersTripId, setPassengersTripId] = useState(null)
+  const [passengersOpen, setPassengersOpen] = useState(false)
 
   const {
     register,
@@ -174,6 +179,11 @@ export default function ManageTrips() {
       status: trip.status,
     })
     setDialogOpen(true)
+  }
+
+  const handleOpenPassengers = (trip) => {
+    setPassengersTripId(trip.id)
+    setPassengersOpen(true)
   }
 
   const handleDelete = async (id) => {
@@ -316,8 +326,18 @@ export default function ManageTrips() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => handleOpenPassengers(trip)}
+                          className="h-8 w-8"
+                          title="Danh sách khách"
+                        >
+                          <Users className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleOpenEdit(trip)}
                           className="h-8 w-8"
+                          title="Chỉnh sửa"
                         >
                           <Edit2 className="h-4 w-4" />
                         </Button>
@@ -477,6 +497,8 @@ export default function ManageTrips() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <TripPassengersDialog open={passengersOpen} onOpenChange={setPassengersOpen} tripId={passengersTripId} />
 
     </motion.div>
   )

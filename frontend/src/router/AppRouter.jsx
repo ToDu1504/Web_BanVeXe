@@ -28,6 +28,7 @@ import Statistics from '@/pages/staff/Statistics'
 import ViewTrips from '@/pages/staff/ViewTrips'
 import ViewRoutes from '@/pages/staff/ViewRoutes'
 import ViewVehicles from '@/pages/staff/ViewVehicles'
+import PrintReconciliation from '@/pages/staff/PrintReconciliation'
 
 // Admin Protected Pages
 import Dashboard from '@/pages/admin/Dashboard'
@@ -190,6 +191,16 @@ export default function AppRouter() {
           <PrivateRoute allowedRoles={['staff', 'admin']}>
             <AdminLayout>
               <ViewVehicles />
+            </AdminLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/staff/print-log"
+        element={
+          <PrivateRoute allowedRoles={['staff', 'admin']}>
+            <AdminLayout>
+              <PrintReconciliation />
             </AdminLayout>
           </PrivateRoute>
         }

@@ -20,12 +20,14 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import InvoiceStatus from '@/components/features/InvoiceStatus'
 import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
+import TicketPrintView from '@/components/features/TicketPrintView'
 import { Pagination } from '@/components/ui/pagination'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
-import { Receipt, Search, Edit2, Eye, Loader2, Trash2 } from 'lucide-react'
+import { Receipt, Search, Edit2, Eye, Loader2, Trash2, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { fadeInUp } from '@/lib/motionVariants'
 
@@ -49,6 +51,13 @@ export default function ManageInvoice() {
   // Details Dialog state
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [activeInvoice, setActiveInvoice] = useState(null)
+
+  // Print ticket state
+  const [printOpen, setPrintOpen] = useState(false)
+  const [printTicketData, setPrintTicketData] = useState(null)
+  const [reprintTarget, setReprintTarget] = useState(null)
+  const [reprintReason, setReprintReason] = useState('')
+  const [printing, setPrinting] = useState(false)
 
   // Gõ tới đâu tìm tới đó nhưng chỉ gọi API sau khi ngừng gõ 400ms.
   useEffect(() => {
@@ -134,6 +143,41 @@ export default function ManageInvoice() {
   const handleOpenDetails = (invoice) => {
     setActiveInvoice(invoice)
     setDetailsOpen(true)
+  }
+
+  const refreshAfterPrint = async () => {
+    const res = await invoiceApi.getAll({ page, limit: 10, search: debouncedSearch || undefined, status: statusFilter })
+    setInvoices(res.data)
+    setPagination(res.pagination)
+    const nextActive = res.data.find((inv) => inv.id === activeInvoice?.id)
+    if (nextActive) setActiveInvoice(nextActive)
+  }
+
+  const submitPrint = async (ticketId, reason) => {
+    setPrinting(true)
+    try {
+      const res = await ticketApi.printTicket(ticketId, reason ? { reason } : {})
+      setPrintTicketData(res.ticket)
+      setPrintOpen(true)
+      setReprintTarget(null)
+      setReprintReason('')
+      await refreshAfterPrint()
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Có lỗi xảy ra khi in vé')
+    } finally {
+      setPrinting(false)
+    }
+  }
+
+  // Vé chưa in lần nào -> in thẳng. Vé đã in rồi -> bắt buộc xác nhận + lý do
+  // in lại, để tránh in tràn lan và có log rõ ràng cho việc đối soát.
+  const handlePrintTicket = (ticket) => {
+    if (ticket.print_count > 0) {
+      setReprintTarget(ticket)
+      setReprintReason('')
+    } else {
+      submitPrint(ticket.id, null)
+    }
   }
 
   const paymentMethodLabels = {
@@ -365,6 +409,28 @@ export default function ManageInvoice() {
                               <span className={t.booking_status === 'booked' ? 'text-[hsl(var(--success))]' : 'text-[hsl(var(--destructive))]'}>
                                 {t.booking_status === 'booked' ? 'Đã đặt' : 'Đã hủy'}
                               </span>
+                              {t.booking_status === 'booked' && activeInvoice.payment_status === 'paid' && (
+                                <Button
+                                  variant="ghost"
+                                  disabled={printing}
+                                  onClick={() => handlePrintTicket(t)}
+                                  className={`h-6 px-2 text-[10px] border rounded flex items-center gap-1 ${
+                                    t.print_count > 0
+                                      ? 'text-amber-600 border-amber-400/50 hover:bg-amber-500/10'
+                                      : 'text-[hsl(var(--primary))] border-[hsl(var(--primary)/0.3)] hover:bg-[hsl(var(--primary)/0.1)]'
+                                  }`}
+                                >
+                                  <Printer className="h-3 w-3" /> {t.print_count > 0 ? 'In lại vé' : 'In vé'}
+                                </Button>
+                              )}
+                              {t.booking_status === 'booked' && activeInvoice.payment_status !== 'paid' && (
+                                <span
+                                  className="text-[10px] text-[hsl(var(--muted-foreground))]"
+                                  title="Cần cập nhật trạng thái đã thanh toán trước khi in vé"
+                                >
+                                  Chưa thể in
+                                </span>
+                              )}
                               {t.booking_status === 'booked' && (
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
@@ -394,6 +460,11 @@ export default function ManageInvoice() {
                             </div>
                           </div>
                           <p className="text-xs">Hành khách: {t.passenger_name} ({t.passenger_phone})</p>
+                          {t.issued_at && (
+                            <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                              Đã xuất vé lúc {formatDateTime(t.issued_at)}{t.print_count > 1 ? ` (đã in ${t.print_count} lần)` : ''}
+                            </p>
+                          )}
                           {t.Trip && (
                             <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
                               Chuyến: {t.Trip.Route?.origin} → {t.Trip.Route?.destination} ({formatDateTime(t.Trip.departure_time)})
@@ -411,6 +482,39 @@ export default function ManageInvoice() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Reprint confirmation — vé đã in trước đó bắt buộc nhập lý do */}
+      <AlertDialog open={!!reprintTarget} onOpenChange={(v) => !v && setReprintTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>In lại vé #{reprintTarget?.id}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vé này đã được in {reprintTarget?.print_count} lần trước đó. Vui lòng nhập lý do in lại
+              (ví dụ: khách làm mất vé) để lưu vào lịch sử đối soát.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 my-2">
+            <Label htmlFor="reprint-reason">Lý do in lại</Label>
+            <Textarea
+              id="reprint-reason"
+              value={reprintReason}
+              onChange={(e) => setReprintReason(e.target.value)}
+              placeholder="Nhập lý do in lại vé..."
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Đóng</AlertDialogCancel>
+            <Button
+              disabled={reprintReason.trim().length < 3 || printing}
+              onClick={() => submitPrint(reprintTarget.id, reprintReason.trim())}
+            >
+              {printing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Xác nhận in lại'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <TicketPrintView open={printOpen} onOpenChange={setPrintOpen} ticket={printTicketData} />
     </motion.div>
   )
 }

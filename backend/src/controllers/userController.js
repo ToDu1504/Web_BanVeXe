@@ -1,3 +1,4 @@
+const crypto = require('crypto')
 const { Op } = require('sequelize')
 const { User, Invoice } = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
@@ -163,6 +164,81 @@ const userController = {
     } catch (error) {
       console.error('Lỗi user delete:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi xóa tài khoản.' })
+    }
+  },
+
+  // @desc    Quầy vé — tìm khách hàng theo SĐT để đặt vé hộ (chỉ trả về tài
+  //          khoản role 'customer', không cho phép chọn tài khoản staff/admin
+  //          làm chủ hóa đơn).
+  // @route   GET /api/users/customers/search?phone=
+  // @access  Private/Staff/Admin
+  searchCustomers: async (req, res) => {
+    try {
+      const { phone } = req.query
+      if (!phone || phone.trim().length < 3) {
+        return res.status(400).json({ message: 'Vui lòng nhập ít nhất 3 số điện thoại để tìm kiếm.' })
+      }
+
+      const customers = await User.findAll({
+        where: { phone: { [Op.like]: `%${phone.trim()}%` }, role: 'customer' },
+        attributes: ['id', 'full_name', 'phone', 'email'],
+        limit: 10,
+      })
+
+      return res.status(200).json(customers)
+    } catch (error) {
+      console.error('Lỗi searchCustomers:', error)
+      return res.status(500).json({ message: 'Lỗi máy chủ khi tìm khách hàng.' })
+    }
+  },
+
+  // @desc    Quầy vé — tìm khách hàng theo SĐT, tạo mới nếu chưa có tài
+  //          khoản, để nhân viên đặt vé hộ gắn đúng vào khách hàng thật thay
+  //          vì gắn vào tài khoản của chính nhân viên.
+  // @route   POST /api/users/customers
+  // @access  Private/Staff/Admin
+  resolveOrCreateCustomer: async (req, res) => {
+    try {
+      const { full_name, phone, email } = req.body
+
+      const existing = await User.findOne({ where: { phone } })
+      if (existing) {
+        if (existing.role !== 'customer') {
+          return res.status(409).json({
+            message: 'Số điện thoại này thuộc về một tài khoản nhân viên/quản trị viên, không thể đặt vé hộ.',
+          })
+        }
+        return res.status(200).json({
+          id: existing.id, full_name: existing.full_name, phone: existing.phone, email: existing.email,
+        })
+      }
+
+      // Khách chưa có tài khoản: tạo nhanh một tài khoản customer. Email và
+      // mật khẩu là placeholder — khách không dùng để đăng nhập ngay, có thể
+      // đăng ký lại với email thật sau nếu muốn tự quản lý tài khoản online.
+      let placeholderEmail = email?.trim() || `khach.${phone}@quayve.local`
+      if (!email) {
+        const clash = await User.findOne({ where: { email: placeholderEmail } })
+        if (clash) {
+          placeholderEmail = `khach.${phone}.${crypto.randomBytes(2).toString('hex')}@quayve.local`
+        }
+      }
+
+      const newCustomer = await User.create({
+        full_name,
+        phone,
+        email: placeholderEmail,
+        password: crypto.randomBytes(16).toString('hex'),
+        role: 'customer',
+        is_active: true,
+      })
+
+      return res.status(201).json({
+        id: newCustomer.id, full_name: newCustomer.full_name, phone: newCustomer.phone, email: newCustomer.email,
+      })
+    } catch (error) {
+      console.error('Lỗi resolveOrCreateCustomer:', error)
+      return res.status(500).json({ message: 'Lỗi máy chủ khi xử lý thông tin khách hàng.' })
     }
   },
 }

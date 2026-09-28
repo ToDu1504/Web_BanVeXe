@@ -162,6 +162,9 @@ const schemas = {
   createInvoice: Joi.object({
     total_price: Joi.number().optional(),
     payment_method: Joi.string().valid('cash', 'momo').required(),
+    // Chỉ có tác dụng khi người gọi là staff/admin (đặt vé hộ khách) — xem
+    // invoiceController.create. Khách hàng gửi field này sẽ bị từ chối 403.
+    customer_id: Joi.number().integer().optional(),
     tickets: Joi.array().items(
       Joi.object({
         trip_id: Joi.number().integer().required(),
@@ -175,6 +178,28 @@ const schemas = {
 
   updateInvoiceStatus: Joi.object({
     payment_status: Joi.string().valid('pending', 'paid', 'refunded').required(),
+  }),
+
+  // Quầy vé — đặt vé hộ khách
+  resolveCustomer: Joi.object({
+    full_name: Joi.string().min(2).max(100).required().messages({
+      'string.min': 'Họ tên phải có ít nhất 2 ký tự.',
+      'any.required': 'Họ tên là bắt buộc.',
+    }),
+    phone: Joi.string().pattern(/^(0[3|5|7|8|9])+([0-9]{8})$/).required().messages({
+      'string.pattern.base': 'Số điện thoại không đúng định dạng Việt Nam.',
+      'any.required': 'Số điện thoại là bắt buộc.',
+    }),
+    email: Joi.string().email().optional().messages({
+      'string.email': 'Email không đúng định dạng.',
+    }),
+  }),
+
+  // Ticket printing (quầy vé)
+  printTicket: Joi.object({
+    reason: Joi.string().min(3).max(255).optional().messages({
+      'string.min': 'Lý do in lại phải có ít nhất 3 ký tự.',
+    }),
   }),
 }
 

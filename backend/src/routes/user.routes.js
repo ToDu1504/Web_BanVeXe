@@ -6,7 +6,12 @@ const { authorize } = require('../middlewares/role')
 const validate = require('../middlewares/validate')
 const schemas = require('../utils/joiSchemas')
 
-// Protect all routes to only be accessible by Admins
+// Quầy vé — đặt vé hộ khách: staff/admin cần tìm/tạo khách hàng theo SĐT.
+// Khai báo TRƯỚC blanket admin-only middleware bên dưới, với authorize riêng.
+router.get('/customers/search', protect, authorize('staff', 'admin'), userController.searchCustomers)
+router.post('/customers', protect, authorize('staff', 'admin'), validate(schemas.resolveCustomer), userController.resolveOrCreateCustomer)
+
+// Protect all routes below to only be accessible by Admins
 router.use(protect, authorize('admin'))
 
 router.route('/')
