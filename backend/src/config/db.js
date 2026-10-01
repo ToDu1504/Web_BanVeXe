@@ -9,7 +9,7 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 3306,
     dialect: 'mysql',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    logging: false,
     define: {
       timestamps: true, // Auto adds createdAt and updatedAt
       underscored: true, // Use snake_case for db columns (created_at, updated_at)

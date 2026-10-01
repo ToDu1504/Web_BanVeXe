@@ -16,12 +16,9 @@ const tripController = {
         return res.status(400).json({ message: 'Thiếu tham số tìm kiếm (origin, destination, date).' })
       }
 
-      // Format date range (start of day to end of day) in Local time (GMT+7)
-      const startOfDay = new Date(`${date}T00:00:00.000Z`)
-      const endOfDay = new Date(`${date}T23:59:59.999Z`)
-
-      // Adjust offset for timezone check in query (GMT+7 is -7 hours offset from UTC)
-      // Since departure_time is saved as DATETIME in MySQL, Op.between works great
+      // departure_time stored as DATETIME (no timezone) in MySQL — compare as local VN time (UTC+7)
+      const startOfDay = new Date(`${date}T00:00:00+07:00`)
+      const endOfDay = new Date(`${date}T23:59:59.999+07:00`)
       const where = {
         departure_time: {
           [Op.between]: [startOfDay, endOfDay],

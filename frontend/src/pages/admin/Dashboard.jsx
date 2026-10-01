@@ -35,11 +35,14 @@ export default function Dashboard() {
         const users = await userApi.getAll()
         setUserCount(users.length)
 
-        // Fetch upcoming trips (all trips)
-        const trips = await tripApi.getAll()
-        const upcoming = trips
-          .filter(t => new Date(t.departure_time) > new Date())
-          .slice(0, 5) // Show top 5 upcoming
+        // Fetch only upcoming trips (server-side filter + limit)
+        const tripsData = await tripApi.getAll({
+          from: new Date().toISOString(),
+          status: 'scheduled',
+          page: 1,
+          limit: 5,
+        })
+        const upcoming = tripsData.data || tripsData
         setUpcomingTrips(upcoming)
 
         // Fetch stats

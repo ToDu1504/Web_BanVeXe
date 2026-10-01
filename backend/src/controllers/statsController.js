@@ -101,10 +101,10 @@ const statsController = {
         return res.status(400).json({ message: 'Vui lòng cung cấp đầy đủ startDate và endDate (YYYY-MM-DD).' })
       }
 
-      const start = new Date(`${startDate}T00:00:00.000Z`)
-      const end = new Date(`${endDate}T23:59:59.999Z`)
+      const start = new Date(`${startDate}T00:00:00+07:00`)
+      const end = new Date(`${endDate}T23:59:59.999+07:00`)
 
-      // Query paid invoices in range
+      // Query paid invoices in range, eager-load booked tickets to avoid N+1
       const invoices = await Invoice.findAll({
         where: {
           payment_status: 'paid',
@@ -112,28 +112,31 @@ const statsController = {
             [Op.between]: [start, end],
           },
         },
+        include: [
+          {
+            model: Ticket,
+            where: { booking_status: 'booked' },
+            required: false,
+          },
+        ],
         order: [['created_at', 'ASC']],
       })
 
       // Group by date (Vietnam local format dd/MM)
       const dailyRevenue = {}
-      
+
       // Initialize daily range map to ensure dates with 0 revenue are shown
       const current = new Date(start)
       while (current <= end) {
-        const dateStr = current.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+        const dateStr = current.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' })
         dailyRevenue[dateStr] = { date: dateStr, revenue: 0, tickets: 0 }
         current.setDate(current.getDate() + 1)
       }
 
       // Populate values from actual database invoices
       for (const inv of invoices) {
-        const dateStr = new Date(inv.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
-        
-        // Count tickets inside invoice
-        const ticketCount = await Ticket.count({
-          where: { invoice_id: inv.id, booking_status: 'booked' },
-        })
+        const dateStr = new Date(inv.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' })
+        const ticketCount = inv.Tickets ? inv.Tickets.length : 0
 
         if (!dailyRevenue[dateStr]) {
           dailyRevenue[dateStr] = { date: dateStr, revenue: 0, tickets: 0 }
