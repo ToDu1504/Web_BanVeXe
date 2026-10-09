@@ -67,6 +67,15 @@ const Ticket = sequelize.define('Ticket', {
     allowNull: false,
     defaultValue: 0,
   },
+  // Điểm danh khách lên xe (tài xế/nhân viên tick). NULL = chưa lên xe.
+  boarded_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  boarded_by: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
 }, {
   tableName: 'tickets',
   timestamps: true,

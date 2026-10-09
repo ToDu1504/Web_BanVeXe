@@ -7,6 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "db:sync": "node src/scripts/syncDb.js",
+    "db:add-driver": "node src/scripts/addDriverFeatures.js",
+    "db:seed-drivers": "node src/scripts/seedDrivers.js",
     "db:seed": "node src/scripts/seedData.js"
   },
   "dependencies": {
@@ -19,6 +21,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "mysql2": "^3.14.0",
+    "nodemailer": "^10.0.16",
     "sequelize": "^6.37.7"
   },
   "devDependencies": {

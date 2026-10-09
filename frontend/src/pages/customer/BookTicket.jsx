@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useForm, useFieldArray } from 'react-hook-form'
@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/form-field'
-import { Bus, MapPin, Calendar, Clock, CreditCard, Banknote, ArrowRight, Loader2, UserSearch, Check, X } from 'lucide-react'
+import { Bus, CreditCard, Banknote, ArrowRight, Loader2, UserSearch, Check, X } from 'lucide-react'
 import { formatCurrency, formatDateTime, formatDuration } from '@/lib/utils'
 import { toast } from 'sonner'
 import { staggerContainer, fadeInUp } from '@/lib/motionVariants'
@@ -107,17 +107,42 @@ export default function BookTicket() {
     register,
     control,
     handleSubmit,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(bookingFormSchema),
     defaultValues: {
+      // Staff/admin booking on someone's behalf: never prefill with the staff
+      // member's own name/phone — it's filled from the chosen customer instead.
       passengers: selectedSeats.map(s => ({
-        fullName: s.passengerName || user?.full_name || '',
-        phone: s.passengerPhone || user?.phone || '',
+        fullName: s.passengerName || (isStaffBooking ? '' : user?.full_name) || '',
+        phone: s.passengerPhone || (isStaffBooking ? '' : user?.phone) || '',
       })),
       paymentMethod: 'momo',
     },
   })
+
+  // When staff picks/creates the customer, copy their name/phone into every
+  // passenger row that is still empty or still holds the previous customer's
+  // autofill (rows the staff typed by hand are left alone).
+  const lastAutofill = useRef(null)
+  useEffect(() => {
+    if (!isStaffBooking) return
+    const prev = lastAutofill.current
+    const next = selectedCustomer
+      ? { fullName: selectedCustomer.full_name || '', phone: selectedCustomer.phone || '' }
+      : { fullName: '', phone: '' }
+    ;(getValues('passengers') || []).forEach((p, i) => {
+      if (!p.fullName || (prev && p.fullName === prev.fullName)) {
+        setValue(`passengers.${i}.fullName`, next.fullName, { shouldValidate: !!next.fullName })
+      }
+      if (!p.phone || (prev && p.phone === prev.phone)) {
+        setValue(`passengers.${i}.phone`, next.phone, { shouldValidate: !!next.phone })
+      }
+    })
+    lastAutofill.current = selectedCustomer ? next : null
+  }, [selectedCustomer, isStaffBooking, getValues, setValue])
 
   const { fields } = useFieldArray({
     control,

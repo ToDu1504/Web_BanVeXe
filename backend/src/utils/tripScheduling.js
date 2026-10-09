@@ -35,8 +35,15 @@ const findVehicleScheduleConflict = async ({ vehicleId, departureTime, arrivalTi
   })
 }
 
+// Chuyến đã chạy (đang chạy/hoàn thành) hoặc đã quá giờ khởi hành — khách
+// không còn được tự hủy vé.
+const hasTripDeparted = (trip) => (
+  ['ongoing', 'completed'].includes(trip.status) || new Date(trip.departure_time).getTime() <= Date.now()
+)
+
 module.exports = {
   DEFAULT_TRIP_DURATION_MS,
   getEffectiveArrivalMs,
+  hasTripDeparted,
   findVehicleScheduleConflict,
 }

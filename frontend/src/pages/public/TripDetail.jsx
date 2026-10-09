@@ -98,6 +98,8 @@ export default function TripDetail() {
           </h1>
           <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
             {selectedTrip.Vehicle?.license_plate && `Xe ${selectedTrip.Vehicle.license_plate} • `}
+            {selectedTrip.Driver ? `Tài xế ${selectedTrip.Driver.full_name} • ` : ''}
+            {selectedTrip.CoDriver ? `Tài xế phụ ${selectedTrip.CoDriver.full_name} • ` : ''}
             Biển số được cấp phép vận chuyển hành khách
           </p>
         </div>
@@ -226,7 +228,7 @@ export default function TripDetail() {
           <div className="bg-[hsl(var(--muted)/0.5)] border border-[hsl(var(--border))] p-4 rounded-xl flex gap-3 text-xs text-[hsl(var(--muted-foreground))]">
             <Info className="h-5 w-5 text-[hsl(var(--primary))] shrink-0" />
             <p>
-              Hệ thống hỗ trợ hoàn hủy vé trực tuyến trước giờ khởi hành tối thiểu 24 giờ. Phí hủy vé có thể áp dụng theo quy chế.
+              Hệ thống hỗ trợ hoàn hủy vé trực tuyến. Phí hủy vé có thể áp dụng theo quy chế.
             </p>
           </div>
         </motion.div>

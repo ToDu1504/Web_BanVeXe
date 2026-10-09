@@ -1,4 +1,5 @@
 const { Op } = require('sequelize')
+const { sequelize } = require('../config/db')
 const { Route, Trip } = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
 
@@ -55,17 +56,43 @@ const routeController = {
   // @access  Private/Admin
   create: async (req, res) => {
     try {
-      const { origin, destination, distance_km, duration_min, base_price } = req.body
+      const { origin, destination, distance_km, duration_min, base_price, create_return } = req.body
 
-      const route = await Route.create({
-        origin,
-        destination,
-        distance_km,
-        duration_min,
-        base_price,
-      })
+      // Tạo cả tuyến đi và tuyến về (B→A) trong cùng một transaction; bỏ qua
+      // tuyến về nếu đã tồn tại hoặc điểm đi trùng điểm đến.
+      const t = await sequelize.transaction()
+      try {
+        const route = await Route.create({
+          origin,
+          destination,
+          distance_km,
+          duration_min,
+          base_price,
+        }, { transaction: t })
 
-      return res.status(201).json(route)
+        let returnRoute = null
+        if (create_return !== false && origin !== destination) {
+          const existingReturn = await Route.findOne({
+            where: { origin: destination, destination: origin },
+            transaction: t,
+          })
+          if (!existingReturn) {
+            returnRoute = await Route.create({
+              origin: destination,
+              destination: origin,
+              distance_km,
+              duration_min,
+              base_price,
+            }, { transaction: t })
+          }
+        }
+
+        await t.commit()
+        return res.status(201).json({ route, returnRoute })
+      } catch (innerError) {
+        await t.rollback()
+        throw innerError
+      }
     } catch (error) {
       console.error('Lỗi route create:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi thêm tuyến đường.' })

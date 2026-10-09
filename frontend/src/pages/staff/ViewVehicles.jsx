@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { vehicleApi } from '@/api/vehicleApi'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import VehicleDriverCell from '@/components/features/VehicleDriverCell'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import TableSkeleton from '@/components/common/TableSkeleton'
@@ -83,7 +84,7 @@ export default function ViewVehicles() {
           </div>
 
           {loading ? (
-            <TableSkeleton rows={5} columns={5} />
+            <TableSkeleton rows={5} columns={6} />
           ) : vehicles.length > 0 ? (
             <Table>
               <TableHeader>
@@ -92,6 +93,7 @@ export default function ViewVehicles() {
                   <TableHead>Loại phương tiện</TableHead>
                   <TableHead>Tổng số ghế</TableHead>
                   <TableHead>Sơ đồ layout</TableHead>
+                  <TableHead>Tài xế</TableHead>
                   <TableHead>Trạng thái</TableHead>
                 </TableRow>
               </TableHeader>
@@ -118,6 +120,9 @@ export default function ViewVehicles() {
                       ) : (
                         'Chưa định dạng'
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <VehicleDriverCell vehicle={vehicle} />
                     </TableCell>
                     <TableCell>
                       <ActiveStatus isActive={vehicle.is_active} />

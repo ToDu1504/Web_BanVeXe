@@ -18,6 +18,8 @@ router.route('/')
   .get(userController.getAll)
   .post(validate(schemas.createUser), userController.create)
 
+router.get('/drivers', userController.getDrivers)
+router.get('/:id/unavailabilities', userController.getDriverUnavailabilities)
 router.put('/:id/role', validate(schemas.updateUserRole), userController.updateRole)
 router.put('/:id/status', validate(schemas.updateUserStatus), userController.updateStatus)
 router.delete('/:id', userController.delete)

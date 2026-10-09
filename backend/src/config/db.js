@@ -27,6 +27,15 @@ const sequelize = new Sequelize(
       // no real BLOB columns, so it's safe to treat every 'BLOB' field as
       // JSON here — parse once, for the whole app.
       typeCast: (field, next) => {
+        // MySQL DATE columns (DataTypes.DATEONLY, e.g. DriverUnavailability
+        // start_date/end_date) come back from mysql2 as a JS Date built in the
+        // connection timezone (+07:00) — serialized to JSON it shifts back to
+        // the previous day ("2026-12-19T17:00:00.000Z"). Keep the raw
+        // 'YYYY-MM-DD' string instead. DATETIME/TIMESTAMP are separate field
+        // types and unaffected.
+        if (field.type === 'DATE') {
+          return field.string()
+        }
         if (field.type === 'BLOB' || field.type === 'JSON') {
           const raw = field.string()
           if (raw === null) return null

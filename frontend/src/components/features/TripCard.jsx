@@ -38,6 +38,14 @@ export default function TripCard({ trip }) {
                   <User className="h-3.5 w-3.5 mr-1" />
                   <span>Còn {trip.available_seats} / {trip.Vehicle?.total_seats || 40} ghế</span>
                 </div>
+                {trip.Driver && (
+                  <div className="flex items-center text-xs text-[hsl(var(--muted-foreground))]">
+                    <span>
+                      Tài xế: <span className="font-medium text-[hsl(var(--foreground))]">{trip.Driver.full_name}</span>
+                      {trip.CoDriver && <> · Phụ: <span className="font-medium text-[hsl(var(--foreground))]">{trip.CoDriver.full_name}</span></>}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Origin to Destination */}

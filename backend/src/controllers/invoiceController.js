@@ -2,6 +2,11 @@ const { Op } = require('sequelize')
 const { sequelize } = require('../config/db')
 const { Invoice, Ticket, Trip, Route, Vehicle, User } = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
+const { hasTripDeparted } = require('../utils/tripScheduling')
+
+// Tài xế của chuyến hiển thị kèm vé (chỉ tên — không lộ SĐT tài xế cho khách).
+const TRIP_DRIVER_INCLUDE = { model: User, as: 'Driver', attributes: ['id', 'full_name'] }
+const TRIP_CO_DRIVER_INCLUDE = { model: User, as: 'CoDriver', attributes: ['id', 'full_name'] }
 
 // Only these payment_status transitions make business sense:
 //   pending  -> paid      (staff confirms cash/MoMo payment received)
@@ -14,10 +19,6 @@ const ALLOWED_STATUS_TRANSITIONS = {
   paid: ['refunded'],
   refunded: [],
 }
-
-// Matches the policy advertised on the Cancellation Policy page — self-service
-// cancellation requires at least this many hours' notice before departure.
-const CANCELLATION_CUTOFF_HOURS = 24
 
 const invoiceController = {
   // @desc    Create invoice and tickets with Transaction & Double Booking check
@@ -67,6 +68,10 @@ const invoiceController = {
       for (const tripId of tripIds) {
         if (!tripsById.has(tripId)) {
           throw new Error(`Không tìm thấy chuyến xe ID ${tripId}`)
+        }
+        const trip = tripsById.get(tripId)
+        if (trip.status !== 'scheduled' || new Date(trip.departure_time).getTime() <= Date.now()) {
+          throw new Error(`Chuyến xe ID ${tripId} đã khởi hành hoặc không còn mở bán.`)
         }
       }
 
@@ -152,7 +157,7 @@ const invoiceController = {
           include: [
             {
               model: Trip,
-              include: [Route, Vehicle],
+              include: [Route, Vehicle, TRIP_DRIVER_INCLUDE, TRIP_CO_DRIVER_INCLUDE],
             },
           ],
         },
@@ -203,21 +208,15 @@ const invoiceController = {
         return res.status(400).json({ message: 'Hóa đơn này đã được hoàn tiền trước đó.' })
       }
 
-      // Advertised cancellation policy (see CancellationPolicy.jsx): self-service
-      // cancellation requires at least 24h notice before departure. Staff/admin
-      // acting on a customer's behalf can override this.
+      // Khách tự hủy được bất cứ lúc nào TRƯỚC giờ khởi hành — không được hủy
+      // (và nhận hoàn tiền) khi có chuyến đã chạy. Staff/admin vẫn được hủy hộ.
       if (req.user.role === 'customer') {
-        const now = Date.now()
-        const tooLate = invoice.Tickets.some((ticket) => (
-          ticket.booking_status === 'booked' &&
-          ticket.Trip &&
-          new Date(ticket.Trip.departure_time).getTime() - now < CANCELLATION_CUTOFF_HOURS * 60 * 60 * 1000
+        const departed = invoice.Tickets.some((ticket) => (
+          ticket.booking_status === 'booked' && ticket.Trip && hasTripDeparted(ticket.Trip)
         ))
-        if (tooLate) {
+        if (departed) {
           await t.rollback()
-          return res.status(400).json({
-            message: `Chỉ có thể hủy vé trước giờ khởi hành tối thiểu ${CANCELLATION_CUTOFF_HOURS} giờ.`,
-          })
+          return res.status(400).json({ message: 'Có chuyến xe trong hóa đơn đã khởi hành, không thể hủy.' })
         }
       }
 
@@ -277,7 +276,7 @@ const invoiceController = {
             include: [
               {
                 model: Trip,
-                include: [Route, Vehicle],
+                include: [Route, Vehicle, TRIP_DRIVER_INCLUDE, TRIP_CO_DRIVER_INCLUDE],
               },
             ],
           },
@@ -341,7 +340,7 @@ const invoiceController = {
           include: [
             {
               model: Trip,
-              include: [Route, Vehicle],
+              include: [Route, Vehicle, TRIP_DRIVER_INCLUDE, TRIP_CO_DRIVER_INCLUDE],
             },
           ],
         },

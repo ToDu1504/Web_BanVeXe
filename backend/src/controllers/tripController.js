@@ -1,8 +1,60 @@
 const { Op } = require('sequelize')
 const { sequelize } = require('../config/db')
-const { Trip, Route, Vehicle, Ticket, Invoice } = require('../models')
+const { Trip, Route, Vehicle, Ticket, Invoice, User, TripIncident } = require('../models')
 const { findVehicleScheduleConflict } = require('../utils/tripScheduling')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
+const { validateDriverPair } = require('../utils/driverScheduling')
+const { sendDriverAssigned, sendDriverUnassigned } = require('../services/mailService')
+
+const DRIVER_ATTRIBUTES = ['id', 'full_name', 'phone', 'email']
+// Endpoint công khai (tìm kiếm/chi tiết chuyến) chỉ lộ tên tài xế.
+const PUBLIC_DRIVER_INCLUDE = { model: User, as: 'Driver', attributes: ['id', 'full_name'], required: false }
+const PUBLIC_CO_DRIVER_INCLUDE = { model: User, as: 'CoDriver', attributes: ['id', 'full_name'], required: false }
+
+// Gắn thêm số sự cố chưa xử lý (open_incident_count) vào từng chuyến để UI
+// staff/admin hiện badge cảnh báo — truy vấn riêng thay vì include hasMany để
+// không làm hỏng limit/offset của phân trang.
+const withOpenIncidentCounts = async (trips) => {
+  const ids = trips.map((t) => t.id)
+  const counts = new Map()
+  if (ids.length > 0) {
+    const rows = await TripIncident.findAll({
+      where: { trip_id: { [Op.in]: ids }, resolved_at: null },
+      attributes: ['trip_id', [sequelize.fn('COUNT', sequelize.col('id')), 'open']],
+      group: ['trip_id'],
+      raw: true,
+    })
+    for (const row of rows) counts.set(row.trip_id, Number(row.open))
+  }
+  return trips.map((trip) => ({ ...trip.toJSON(), open_incident_count: counts.get(trip.id) || 0 }))
+}
+
+// Gửi mail phân công cho tài xế mới / hủy phân công cho tài xế cũ. Chạy SAU khi
+// đã commit và không bao giờ làm hỏng response (lỗi chỉ log).
+// before/after: { driverId, coDriverId } trước và sau khi lưu.
+const notifyDriverChange = async ({ trip, before, after }) => {
+  try {
+    const fullTrip = await Trip.findByPk(trip.id, { include: [Route, Vehicle] })
+    if (!fullTrip || fullTrip.status === 'cancelled') return
+    const afterIds = [after.driverId, after.coDriverId].filter(Boolean)
+    const roles = [
+      { id: after.driverId, wasSame: before.driverId === after.driverId, isCoDriver: false },
+      { id: after.coDriverId, wasSame: before.coDriverId === after.coDriverId, isCoDriver: true },
+    ]
+    for (const { id, wasSame, isCoDriver } of roles) {
+      if (!id || wasSame) continue
+      const driver = await User.findByPk(id)
+      if (driver) await sendDriverAssigned({ driver, trip: fullTrip, isCoDriver })
+    }
+    for (const id of [before.driverId, before.coDriverId]) {
+      if (!id || afterIds.includes(id)) continue
+      const oldDriver = await User.findByPk(id)
+      if (oldDriver) await sendDriverUnassigned({ driver: oldDriver, trip: fullTrip })
+    }
+  } catch (error) {
+    console.error('Lỗi gửi mail phân công tài xế:', error.message)
+  }
+}
 
 const tripController = {
   // @desc    Public search trips
@@ -19,9 +71,11 @@ const tripController = {
       // departure_time stored as DATETIME (no timezone) in MySQL — compare as local VN time (UTC+7)
       const startOfDay = new Date(`${date}T00:00:00+07:00`)
       const endOfDay = new Date(`${date}T23:59:59.999+07:00`)
+      // Never offer trips that have already departed (e.g. searching today's date)
+      const now = new Date()
       const where = {
         departure_time: {
-          [Op.between]: [startOfDay, endOfDay],
+          [Op.between]: [startOfDay > now ? startOfDay : now, endOfDay],
         },
         status: 'scheduled',
       }
@@ -40,6 +94,8 @@ const tripController = {
             is_active: true,
           },
         },
+        PUBLIC_DRIVER_INCLUDE,
+        PUBLIC_CO_DRIVER_INCLUDE,
       ]
       const order = [['departure_time', 'ASC']]
 
@@ -65,7 +121,7 @@ const tripController = {
   getById: async (req, res) => {
     try {
       const trip = await Trip.findByPk(req.params.id, {
-        include: [Route, Vehicle],
+        include: [Route, Vehicle, PUBLIC_DRIVER_INCLUDE, PUBLIC_CO_DRIVER_INCLUDE],
       })
 
       if (!trip) {
@@ -105,17 +161,32 @@ const tripController = {
   //          Trả về cả vé đã hủy (đánh dấu rõ) để không gây hiểu lầm về sức
   //          chứa còn lại của chuyến.
   // @route   GET /api/trips/:id/tickets
-  // @access  Private/Staff/Admin
+  // @access  Private/Staff/Admin/Driver (tài xế chỉ xem được chuyến của mình)
   getPassengers: async (req, res) => {
     try {
-      const trip = await Trip.findByPk(req.params.id, { include: [Route, Vehicle] })
+      const trip = await Trip.findByPk(req.params.id, {
+        include: [
+          Route,
+          Vehicle,
+          { model: User, as: 'Driver', attributes: ['id', 'full_name', 'phone'] },
+          { model: User, as: 'CoDriver', attributes: ['id', 'full_name', 'phone'] },
+        ],
+      })
       if (!trip) {
         return res.status(404).json({ message: 'Không tìm thấy chuyến xe.' })
       }
 
+      const isDriver = req.user.role === 'driver'
+      if (isDriver && trip.driver_id !== req.user.id && trip.co_driver_id !== req.user.id) {
+        return res.status(403).json({ message: 'Chuyến xe này không được phân công cho bạn.' })
+      }
+
+      // Tài xế chỉ cần tên/SĐT/ghế/đã lên xe — không lộ thông tin thanh toán, in vé.
       const tickets = await Ticket.findAll({
         where: { trip_id: req.params.id },
-        include: [{ model: Invoice, attributes: ['id', 'payment_status', 'payment_method'] }],
+        ...(isDriver
+          ? { attributes: ['id', 'seat_number', 'passenger_name', 'passenger_phone', 'booking_status', 'boarded_at'] }
+          : { include: [{ model: Invoice, attributes: ['id', 'payment_status', 'payment_method'] }] }),
         order: [['seat_number', 'ASC']],
       })
 
@@ -158,19 +229,27 @@ const tripController = {
         })
       }
       const where = andConditions.length > 0 ? { [Op.and]: andConditions } : {}
-      const include = [Route, Vehicle]
+      const include = [
+        Route,
+        Vehicle,
+        { model: User, as: 'Driver', attributes: DRIVER_ATTRIBUTES, required: false },
+        { model: User, as: 'CoDriver', attributes: DRIVER_ATTRIBUTES, required: false },
+      ]
       const order = [['departure_time', 'ASC']]
 
       if (!req.query.page) {
         const trips = await Trip.findAll({ where, include, order })
-        return res.status(200).json(trips)
+        return res.status(200).json(await withOpenIncidentCounts(trips))
       }
 
       const { page, limit, offset } = getPagination(req.query)
       const { rows, count } = await Trip.findAndCountAll({
         where, include, order, limit, offset, distinct: true, subQuery: false,
       })
-      return res.status(200).json({ data: rows, pagination: buildPaginationMeta(page, limit, count) })
+      return res.status(200).json({
+        data: await withOpenIncidentCounts(rows),
+        pagination: buildPaginationMeta(page, limit, count),
+      })
     } catch (error) {
       console.error('Lỗi trips getAll:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi tải danh sách tất cả chuyến chạy.' })
@@ -182,7 +261,7 @@ const tripController = {
   // @access  Private/Admin
   create: async (req, res) => {
     try {
-      const { route_id, vehicle_id, departure_time, arrival_time, price, available_seats, status } = req.body
+      const { route_id, vehicle_id, departure_time, arrival_time, price, available_seats, status, driver_id, co_driver_id } = req.body
 
       if (new Date(departure_time).getTime() <= Date.now()) {
         return res.status(400).json({ message: 'Giờ khởi hành phải ở trong tương lai.' })
@@ -209,6 +288,21 @@ const tripController = {
         })
       }
 
+      if (co_driver_id && !driver_id) {
+        return res.status(400).json({ message: 'Hãy chọn tài xế chính trước khi chọn tài xế phụ.' })
+      }
+      if (driver_id || co_driver_id) {
+        const driverError = await validateDriverPair({
+          driverId: driver_id,
+          coDriverId: co_driver_id,
+          departureTime: departure_time,
+          arrivalTime: arrival_time,
+        })
+        if (driverError) {
+          return res.status(driverError.status).json({ message: driverError.message })
+        }
+      }
+
       const trip = await Trip.create({
         route_id,
         vehicle_id,
@@ -217,7 +311,17 @@ const tripController = {
         price,
         available_seats,
         status: status || 'scheduled',
+        driver_id: driver_id || null,
+        co_driver_id: co_driver_id || null,
       })
+
+      if (trip.driver_id || trip.co_driver_id) {
+        await notifyDriverChange({
+          trip,
+          before: { driverId: null, coDriverId: null },
+          after: { driverId: trip.driver_id, coDriverId: trip.co_driver_id },
+        })
+      }
 
       return res.status(201).json(trip)
     } catch (error) {
@@ -232,7 +336,7 @@ const tripController = {
   update: async (req, res) => {
     const t = await sequelize.transaction()
     try {
-      const { route_id, vehicle_id, departure_time, arrival_time, price, available_seats, status } = req.body
+      const { route_id, vehicle_id, departure_time, arrival_time, price, available_seats, status, driver_id, co_driver_id } = req.body
       const trip = await Trip.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE })
 
       if (!trip) {
@@ -241,8 +345,16 @@ const tripController = {
       }
 
       // Only validate fields that are actually being changed, so editing an
-      // already-past/seeded trip's unrelated fields (e.g. price) still works.
-      if (departure_time !== undefined && new Date(departure_time).getTime() <= Date.now()) {
+      // already-past/seeded trip's unrelated fields (e.g. price, driver,
+      // cancelling it) still works. The admin form always resends
+      // departure_time/arrival_time, so compare against the stored values
+      // instead of just checking for presence.
+      // (minute precision — the form's datetime-local input drops seconds)
+      const toMinute = (v) => (v ? Math.floor(new Date(v).getTime() / 60000) : null)
+      const sameTime = (a, b) => toMinute(a) === toMinute(b)
+      const departureChanged = departure_time !== undefined && !sameTime(departure_time, trip.departure_time)
+      const arrivalChanged = arrival_time !== undefined && !sameTime(arrival_time, trip.arrival_time)
+      if (departureChanged && new Date(departure_time).getTime() <= Date.now()) {
         await t.rollback()
         return res.status(400).json({ message: 'Giờ khởi hành phải ở trong tương lai.' })
       }
@@ -274,7 +386,8 @@ const tripController = {
         }
       }
 
-      if (vehicle_id !== undefined || departure_time !== undefined || arrival_time !== undefined) {
+      const vehicleChanged = vehicle_id !== undefined && Number(vehicle_id) !== trip.vehicle_id
+      if (vehicleChanged || departureChanged || arrivalChanged) {
         const conflict = await findVehicleScheduleConflict({
           vehicleId: effectiveVehicleId,
           departureTime: departure_time || trip.departure_time,
@@ -290,6 +403,33 @@ const tripController = {
         }
       }
 
+      // Tài xế: kiểm tra khi đổi tài xế, hoặc khi đổi giờ của chuyến đã có tài
+      // xế (tránh trùng lịch/ngày nghỉ). Bỏ qua nếu chuyến bị hủy.
+      const before = { driverId: trip.driver_id, coDriverId: trip.co_driver_id }
+      const effectiveDriverId = driver_id !== undefined ? driver_id : trip.driver_id
+      const effectiveCoDriverId = co_driver_id !== undefined ? co_driver_id : trip.co_driver_id
+      const willBeCancelled = (status || trip.status) === 'cancelled'
+      const driverChanged = effectiveDriverId !== before.driverId || effectiveCoDriverId !== before.coDriverId
+      const timingChanged = departureChanged || arrivalChanged
+      if (effectiveCoDriverId && !effectiveDriverId) {
+        await t.rollback()
+        return res.status(400).json({ message: 'Hãy chọn tài xế chính trước khi chọn tài xế phụ.' })
+      }
+      if ((effectiveDriverId || effectiveCoDriverId) && !willBeCancelled && (driverChanged || timingChanged)) {
+        const driverError = await validateDriverPair({
+          driverId: effectiveDriverId,
+          coDriverId: effectiveCoDriverId,
+          departureTime: departure_time || trip.departure_time,
+          arrivalTime: arrival_time !== undefined ? arrival_time : trip.arrival_time,
+          excludeTripId: trip.id,
+          transaction: t,
+        })
+        if (driverError) {
+          await t.rollback()
+          return res.status(driverError.status).json({ message: driverError.message })
+        }
+      }
+
       const isCancelling = status === 'cancelled' && trip.status !== 'cancelled'
 
       trip.route_id = route_id || trip.route_id
@@ -299,6 +439,8 @@ const tripController = {
       trip.price = price || trip.price
       trip.available_seats = available_seats !== undefined ? available_seats : trip.available_seats
       trip.status = status || trip.status
+      if (driver_id !== undefined) trip.driver_id = driver_id
+      if (co_driver_id !== undefined) trip.co_driver_id = co_driver_id
 
       await trip.save({ transaction: t })
 
@@ -347,6 +489,11 @@ const tripController = {
       }
 
       await t.commit()
+
+      if (driverChanged) {
+        await notifyDriverChange({ trip, before, after: { driverId: trip.driver_id, coDriverId: trip.co_driver_id } })
+      }
+
       return res.status(200).json(trip)
     } catch (error) {
       await t.rollback()

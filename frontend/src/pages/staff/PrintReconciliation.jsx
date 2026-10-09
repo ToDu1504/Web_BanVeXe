@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
 import { formatDateTime, formatDate } from '@/lib/utils'
@@ -70,9 +71,9 @@ export default function PrintReconciliation() {
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="flex items-center gap-2 w-full md:w-auto">
               <Calendar className="h-4 w-4 text-[hsl(var(--muted-foreground))] shrink-0" />
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-40" />
+              <DateInput type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-40" />
               <span className="text-sm text-[hsl(var(--muted-foreground))]">đến</span>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-40" />
+              <DateInput type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-40" />
             </div>
 
             {isAdmin && (

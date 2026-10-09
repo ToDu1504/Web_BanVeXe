@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { tripApi } from '@/api/tripApi'
+import { ticketApi } from '@/api/ticketApi'
+import { useAuth } from '@/hooks/useAuth'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +20,9 @@ const vehicleTypeLabels = {
 }
 
 // Danh sách hành khách của một chuyến xe cụ thể — dùng chung cho trang "Xem
-// chuyến xe" (staff) và "Quản lý Chuyến xe" (admin). Hiển thị cả vé đã hủy
+// chuyến xe" (staff), "Quản lý Chuyến xe" (admin) và "Chi tiết chuyến" (tài xế).
+// Tài xế chỉ thấy tên/SĐT/ghế và cột điểm danh (backend không trả thông tin
+// thanh toán/in vé cho role này). Hiển thị cả vé đã hủy
 // (đánh dấu riêng) để không gây hiểu lầm về sức chứa còn lại của chuyến.
 //
 // Ngoài xem trên màn hình, dialog còn in được một "phiếu điểm danh" cho cả
@@ -26,7 +30,9 @@ const vehicleTypeLabels = {
 // hành khách lúc lên xe. Không giới hạn theo trạng thái thanh toán (đây là
 // tài liệu nội bộ, không phải vé giao khách), chỉ đánh dấu đỏ khách chưa trả
 // tiền để nhắc thu trước giờ chạy.
-export default function TripPassengersDialog({ open, onOpenChange, tripId }) {
+export default function TripPassengersDialog({ open, onOpenChange, tripId, onBoardedChange }) {
+  const { user } = useAuth()
+  const isDriver = user?.role === 'driver'
   const [loading, setLoading] = useState(false)
   const [trip, setTrip] = useState(null)
   const [tickets, setTickets] = useState([])
@@ -49,6 +55,23 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId }) {
   }, [open, tripId])
 
   const bookedTickets = tickets.filter((t) => t.booking_status === 'booked')
+  const boardedCount = bookedTickets.filter((t) => t.boarded_at).length
+  // Chỉ điểm danh được khi chuyến còn đang chờ/đang chạy (backend cũng chặn).
+  const canBoard = trip && ['scheduled', 'ongoing'].includes(trip.status)
+
+  const handleToggleBoarded = async (ticket) => {
+    const nextBoarded = !ticket.boarded_at
+    const apply = (value) =>
+      setTickets((prev) => prev.map((t) => (t.id === ticket.id ? { ...t, boarded_at: value } : t)))
+    apply(nextBoarded ? new Date().toISOString() : null) // optimistic
+    try {
+      await ticketApi.setBoarded(ticket.id, nextBoarded)
+      onBoardedChange?.()
+    } catch (error) {
+      apply(ticket.boarded_at) // revert
+      toast.error(error.response?.data?.message || 'Không thể cập nhật điểm danh')
+    }
+  }
 
   // Phiếu điểm danh chỉ hiện khi in — một tờ cho cả chuyến để phụ xe đối
   // chiếu hành khách lúc lên xe (khác với vé xe từng khách ở TicketPrintView).
@@ -69,6 +92,10 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId }) {
         <span>Khởi hành: {trip ? formatDateTime(trip.departure_time) : '—'}</span>
         <span>Xe: {trip?.Vehicle?.license_plate}</span>
         <span>Loại xe: {vehicleTypeLabels[trip?.Vehicle?.vehicle_type] || trip?.Vehicle?.vehicle_type}</span>
+        <span className="col-span-2">
+          Tài xế: {trip?.Driver ? `${trip.Driver.full_name}${trip.Driver.phone ? ` – ${trip.Driver.phone}` : ''}` : '................................'}
+          {'   '}Tài xế phụ: {trip?.CoDriver ? `${trip.CoDriver.full_name}${trip.CoDriver.phone ? ` – ${trip.CoDriver.phone}` : ''}` : '................................'}
+        </span>
         <span className="col-span-2 font-bold">Tổng số khách: {bookedTickets.length}</span>
       </div>
       <table className="w-full text-xs border-collapse border border-black">
@@ -78,7 +105,7 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId }) {
             <th className="border border-black p-1">Ghế</th>
             <th className="border border-black p-1">Họ tên</th>
             <th className="border border-black p-1">SĐT</th>
-            <th className="border border-black p-1">Thanh toán</th>
+            {!isDriver && <th className="border border-black p-1">Thanh toán</th>}
             <th className="border border-black p-1 w-16">Đối chiếu</th>
           </tr>
         </thead>
@@ -89,12 +116,14 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId }) {
               <td className="border border-black p-1 text-center font-bold">{t.seat_number}</td>
               <td className="border border-black p-1">{t.passenger_name}</td>
               <td className="border border-black p-1">{t.passenger_phone}</td>
-              <td className="border border-black p-1 text-center">
-                {t.Invoice?.payment_status === 'paid' ? 'Đã TT' : (
-                  <span className="font-bold" style={{ color: 'red' }}>Chưa TT</span>
-                )}
-              </td>
-              <td className="border border-black p-1"></td>
+              {!isDriver && (
+                <td className="border border-black p-1 text-center">
+                  {t.Invoice?.payment_status === 'paid' ? 'Đã TT' : (
+                    <span className="font-bold" style={{ color: 'red' }}>Chưa TT</span>
+                  )}
+                </td>
+              )}
+              <td className="border border-black p-1 text-center">{t.boarded_at ? '✓' : ''}</td>
             </tr>
           ))}
         </tbody>
@@ -123,7 +152,8 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId }) {
           {trip && (
             <DialogDescription>
               {trip.Route?.origin} → {trip.Route?.destination} · Khởi hành {formatDateTime(trip.departure_time)} ·
-              Xe {trip.Vehicle?.license_plate} · {bookedTickets.length} khách đã đặt
+              Xe {trip.Vehicle?.license_plate} · Tài xế {trip.Driver ? `${trip.Driver.full_name}${trip.Driver.phone ? ` (${trip.Driver.phone})` : ''}` : 'chưa phân công'}
+              {trip.CoDriver && ` · Phụ ${trip.CoDriver.full_name}${trip.CoDriver.phone ? ` (${trip.CoDriver.phone})` : ''}`} · {bookedTickets.length} khách đã đặt · Đã lên xe {boardedCount}/{bookedTickets.length}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -146,9 +176,10 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId }) {
                 <TableRow>
                   <TableHead>Ghế</TableHead>
                   <TableHead>Hành khách</TableHead>
-                  <TableHead>Mã HĐ</TableHead>
-                  <TableHead>Thanh toán</TableHead>
-                  <TableHead>Xuất vé</TableHead>
+                  {!isDriver && <TableHead>Mã HĐ</TableHead>}
+                  {!isDriver && <TableHead>Thanh toán</TableHead>}
+                  {!isDriver && <TableHead>Xuất vé</TableHead>}
+                  <TableHead>Đã lên xe</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -162,17 +193,35 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId }) {
                         <Badge variant="destructive" className="mt-1 text-[10px]">Đã hủy</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs font-semibold">HD-{t.invoice_id}</TableCell>
+                    {!isDriver && <TableCell className="text-xs font-semibold">HD-{t.invoice_id}</TableCell>}
+                    {!isDriver && (
+                      <TableCell>
+                        {t.Invoice ? <InvoiceStatus status={t.Invoice.payment_status} /> : '—'}
+                      </TableCell>
+                    )}
+                    {!isDriver && (
+                      <TableCell className="text-xs">
+                        {t.issued_at ? (
+                          <span className="text-[hsl(var(--success))] font-semibold">
+                            Đã xuất{t.print_count > 1 ? ` (${t.print_count} lần)` : ''}
+                          </span>
+                        ) : (
+                          <span className="text-[hsl(var(--muted-foreground))]">Chưa in</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell>
-                      {t.Invoice ? <InvoiceStatus status={t.Invoice.payment_status} /> : '—'}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {t.issued_at ? (
-                        <span className="text-[hsl(var(--success))] font-semibold">
-                          Đã xuất{t.print_count > 1 ? ` (${t.print_count} lần)` : ''}
-                        </span>
+                      {t.booking_status === 'booked' ? (
+                        <input
+                          type="checkbox"
+                          checked={Boolean(t.boarded_at)}
+                          disabled={!canBoard}
+                          onChange={() => handleToggleBoarded(t)}
+                          aria-label={`Đã lên xe ghế ${t.seat_number}`}
+                          className="h-5 w-5 cursor-pointer accent-[hsl(var(--success))] disabled:cursor-not-allowed disabled:opacity-50"
+                        />
                       ) : (
-                        <span className="text-[hsl(var(--muted-foreground))]">Chưa in</span>
+                        <span className="text-xs text-[hsl(var(--muted-foreground))]">—</span>
                       )}
                     </TableCell>
                   </TableRow>

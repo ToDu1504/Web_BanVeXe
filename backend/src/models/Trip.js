@@ -42,6 +42,32 @@ const Trip = sequelize.define('Trip', {
     type: DataTypes.INTEGER,
     allowNull: true,
   },
+  // Tài xế được phân công (User.role = 'driver'). Xóa tài xế chỉ gỡ liên kết.
+  driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  // Tài xế phụ (lái thay ca trên cùng chuyến) — có hoặc không. Được xem chuyến,
+  // điểm danh, báo sự cố; chỉ tài xế chính bấm Bắt đầu/Hoàn thành.
+  co_driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  // Cờ idempotent của job gửi mail nhắc chuyến (jobs/sendDepartureReminders.js).
+  reminder_sent_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  // Giờ chạy thực tế do tài xế bấm "Bắt đầu chạy"/"Hoàn thành" — khác
+  // departure_time/arrival_time là giờ theo lịch.
+  actual_departure_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  actual_arrival_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
 }, {
   tableName: 'trips',
   timestamps: true,
@@ -49,6 +75,14 @@ const Trip = sequelize.define('Trip', {
     {
       fields: ['template_id', 'departure_time'],
       name: 'idx_trip_template_departure',
+    },
+    {
+      fields: ['driver_id', 'departure_time'],
+      name: 'idx_trips_driver',
+    },
+    {
+      fields: ['co_driver_id', 'departure_time'],
+      name: 'idx_trips_co_driver',
     },
   ],
 })

@@ -33,6 +33,46 @@ export function formatDate(dateStr) {
   }).format(new Date(dateStr))
 }
 
+// ---- Ngày giờ theo múi giờ Việt Nam (dùng cho lịch tuần của tài xế) ----
+const VN_TZ = 'Asia/Ho_Chi_Minh'
+
+// Date/ISO → 'YYYY-MM-DD' theo giờ VN (en-CA cho đúng định dạng ISO).
+export function toVNDateString(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: VN_TZ }).format(new Date(date))
+}
+
+// Chỉ giờ:phút theo giờ VN, VD "08:30"
+export function formatTime(dateStr) {
+  if (!dateStr) return '--:--'
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: VN_TZ,
+  }).format(new Date(dateStr))
+}
+
+// Cộng/trừ ngày trên chuỗi 'YYYY-MM-DD' (không phụ thuộc timezone trình duyệt).
+export function addDays(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+// Thứ 2 của tuần chứa dateStr (tuần VN bắt đầu từ Thứ 2).
+export function getWeekStart(dateStr = toVNDateString()) {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  const dayFromMonday = (d.getUTCDay() + 6) % 7
+  return addDays(dateStr, -dayFromMonday)
+}
+
+// 'YYYY-MM-DD' → 'dd/MM/yyyy'
+export function formatDateString(dateStr) {
+  if (!dateStr) return ''
+  const [y, m, d] = String(dateStr).slice(0, 10).split('-')
+  return `${d}/${m}/${y}`
+}
+
 // Tính thời gian di chuyển (phút → giờ phút)
 export function formatDuration(minutes) {
   const h = Math.floor(minutes / 60)

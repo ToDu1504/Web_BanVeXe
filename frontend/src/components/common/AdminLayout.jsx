@@ -22,6 +22,10 @@ import {
   Ticket,
   Repeat,
   ClipboardList,
+  AlertTriangle,
+  History,
+  CalendarOff,
+  User as UserIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { authApi } from '@/api/authApi'
@@ -108,6 +112,30 @@ export default function AdminLayout({ children }) {
 
   const menuItems = [
     {
+      title: 'Lịch chạy của tôi',
+      path: '/driver/trips',
+      icon: CalendarDays,
+      roles: ['driver'],
+    },
+    {
+      title: 'Lịch sử chuyến',
+      path: '/driver/history',
+      icon: History,
+      roles: ['driver'],
+    },
+    {
+      title: 'Đăng ký ngày nghỉ',
+      path: '/driver/leave',
+      icon: CalendarOff,
+      roles: ['driver'],
+    },
+    {
+      title: 'Hồ sơ cá nhân',
+      path: '/customer/profile',
+      icon: UserIcon,
+      roles: ['driver'],
+    },
+    {
       title: 'Dashboard',
       path: '/admin/dashboard',
       icon: LayoutDashboard,
@@ -183,6 +211,12 @@ export default function AdminLayout({ children }) {
       title: 'Đối soát in vé',
       path: '/staff/print-log',
       icon: ClipboardList,
+      roles: ['staff', 'admin'],
+    },
+    {
+      title: 'Sự cố chuyến xe',
+      path: '/staff/incidents',
+      icon: AlertTriangle,
       roles: ['staff', 'admin'],
     },
   ].filter((item) => item.roles.includes(user?.role))

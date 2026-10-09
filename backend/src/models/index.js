@@ -6,6 +6,8 @@ const Invoice = require('./Invoice')
 const Ticket = require('./Ticket')
 const TripTemplate = require('./TripTemplate')
 const TicketPrint = require('./TicketPrint')
+const TripIncident = require('./TripIncident')
+const DriverUnavailability = require('./DriverUnavailability')
 
 // Associations
 
@@ -52,6 +54,34 @@ TicketPrint.belongsTo(Ticket, { foreignKey: 'ticket_id' })
 User.hasMany(TicketPrint, { foreignKey: 'printed_by' })
 TicketPrint.belongsTo(User, { foreignKey: 'printed_by', as: 'PrintedByUser' })
 
+// User (driver) <-> Trip. Aliased 'Driver' so it never clashes with other User
+// associations. Deleting a driver only detaches (SET NULL), never deletes trips.
+User.hasMany(Trip, { foreignKey: 'driver_id', as: 'DrivenTrips', onDelete: 'SET NULL' })
+Trip.belongsTo(User, { foreignKey: 'driver_id', as: 'Driver' })
+
+// User (co-driver) <-> Trip / TripTemplate — tài xế phụ, alias 'CoDriver'
+User.hasMany(Trip, { foreignKey: 'co_driver_id', as: 'CoDrivenTrips', onDelete: 'SET NULL' })
+Trip.belongsTo(User, { foreignKey: 'co_driver_id', as: 'CoDriver' })
+User.hasMany(TripTemplate, { foreignKey: 'co_driver_id', as: 'CoDrivenTemplates', onDelete: 'SET NULL' })
+TripTemplate.belongsTo(User, { foreignKey: 'co_driver_id', as: 'CoDriver' })
+
+// User (driver) <-> TripTemplate (default driver)
+User.hasMany(TripTemplate, { foreignKey: 'driver_id', as: 'DrivenTemplates', onDelete: 'SET NULL' })
+TripTemplate.belongsTo(User, { foreignKey: 'driver_id', as: 'Driver' })
+
+// Ticket <-> User: who ticked the passenger as boarded
+Ticket.belongsTo(User, { foreignKey: 'boarded_by', as: 'BoardedByUser', constraints: false })
+
+// Trip <-> TripIncident
+Trip.hasMany(TripIncident, { foreignKey: 'trip_id', onDelete: 'CASCADE', hooks: true })
+TripIncident.belongsTo(Trip, { foreignKey: 'trip_id' })
+TripIncident.belongsTo(User, { foreignKey: 'reported_by', as: 'Reporter' })
+TripIncident.belongsTo(User, { foreignKey: 'resolved_by', as: 'Resolver', constraints: false })
+
+// User (driver) <-> DriverUnavailability
+User.hasMany(DriverUnavailability, { foreignKey: 'driver_id', onDelete: 'CASCADE', hooks: true })
+DriverUnavailability.belongsTo(User, { foreignKey: 'driver_id' })
+
 module.exports = {
   User,
   Route,
@@ -61,4 +91,6 @@ module.exports = {
   Ticket,
   TripTemplate,
   TicketPrint,
+  TripIncident,
+  DriverUnavailability,
 }

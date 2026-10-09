@@ -5,6 +5,7 @@ import { tripApi } from '@/api/tripApi'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import TripCard from '@/components/features/TripCard'
@@ -256,7 +257,7 @@ export default function Home() {
                     <CalendarIcon className="h-3.5 w-3.5 mr-1" />
                     Ngày đi
                   </Label>
-                  <Input
+                  <DateInput
                     type="date"
                     value={searchParams.date}
                     min={new Date().toISOString().split('T')[0]}

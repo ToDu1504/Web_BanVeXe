@@ -2,10 +2,7 @@ const { Op } = require('sequelize')
 const { sequelize } = require('../config/db')
 const { Ticket, Invoice, Trip, Route, Vehicle, User, TicketPrint } = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
-
-// Matches the policy advertised on the Cancellation Policy page — self-service
-// cancellation requires at least this many hours' notice before departure.
-const CANCELLATION_CUTOFF_HOURS = 24
+const { hasTripDeparted } = require('../utils/tripScheduling')
 
 const ticketController = {
   // @desc    Cancel a single ticket (of a pending or already-paid invoice)
@@ -41,16 +38,11 @@ const ticketController = {
         return res.status(400).json({ message: 'Vé này đã được hủy trước đó.' })
       }
 
-      // Advertised cancellation policy: self-service cancellation requires at
-      // least 24h notice before departure. Staff/admin can override this.
-      if (req.user.role === 'customer' && ticket.Trip) {
-        const hoursLeft = (new Date(ticket.Trip.departure_time).getTime() - Date.now()) / (60 * 60 * 1000)
-        if (hoursLeft < CANCELLATION_CUTOFF_HOURS) {
-          await t.rollback()
-          return res.status(400).json({
-            message: `Chỉ có thể hủy vé trước giờ khởi hành tối thiểu ${CANCELLATION_CUTOFF_HOURS} giờ.`,
-          })
-        }
+      // Khách tự hủy được bất cứ lúc nào TRƯỚC giờ khởi hành — không được hủy
+      // (và nhận hoàn tiền) khi chuyến đã chạy. Staff/admin vẫn được hủy hộ.
+      if (req.user.role === 'customer' && ticket.Trip && hasTripDeparted(ticket.Trip)) {
+        await t.rollback()
+        return res.status(400).json({ message: 'Chuyến xe đã khởi hành, không thể hủy vé.' })
       }
 
       // Cancel ticket
@@ -254,6 +246,44 @@ const ticketController = {
     } catch (error) {
       console.error('Lỗi getPrintLog:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi lấy báo cáo đối soát in vé.' })
+    }
+  },
+
+  // @desc    Điểm danh khách lên xe (tick/bỏ tick). Tài xế chỉ điểm danh được
+  //          vé thuộc chuyến của mình; staff/admin điểm danh được mọi chuyến.
+  //          Chỉ áp dụng cho vé 'booked' trên chuyến scheduled/ongoing.
+  // @route   PUT /api/tickets/:id/board
+  // @access  Private/Driver/Staff/Admin
+  setBoarded: async (req, res) => {
+    try {
+      const { boarded } = req.body
+      const ticket = await Ticket.findByPk(req.params.id, { include: [Trip] })
+      if (!ticket) {
+        return res.status(404).json({ message: 'Không tìm thấy vé.' })
+      }
+
+      if (req.user.role === 'driver' && ticket.Trip?.driver_id !== req.user.id && ticket.Trip?.co_driver_id !== req.user.id) {
+        return res.status(403).json({ message: 'Vé này không thuộc chuyến được phân công cho bạn.' })
+      }
+      if (ticket.booking_status !== 'booked') {
+        return res.status(400).json({ message: 'Vé đã hủy, không thể điểm danh.' })
+      }
+      if (!['scheduled', 'ongoing'].includes(ticket.Trip?.status)) {
+        return res.status(400).json({ message: 'Chỉ điểm danh được khi chuyến đang chờ hoặc đang chạy.' })
+      }
+
+      ticket.boarded_at = boarded ? new Date() : null
+      ticket.boarded_by = boarded ? req.user.id : null
+      await ticket.save()
+
+      return res.status(200).json({
+        id: ticket.id,
+        boarded_at: ticket.boarded_at,
+        boarded_by: ticket.boarded_by,
+      })
+    } catch (error) {
+      console.error('Lỗi setBoarded:', error)
+      return res.status(500).json({ message: 'Lỗi máy chủ khi điểm danh khách.' })
     }
   },
 }

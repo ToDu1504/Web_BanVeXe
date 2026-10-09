@@ -36,6 +36,8 @@ const routeSchema = zod.object({
   distance_km: zod.coerce.number().min(1, 'Cự ly phải lớn hơn 0'),
   duration_min: zod.coerce.number().min(1, 'Thời gian chạy phải lớn hơn 0'),
   base_price: zod.coerce.number().min(1000, 'Giá gốc tối thiểu là 1,000đ'),
+  // Chỉ dùng khi thêm mới: tự tạo luôn tuyến chiều về (điểm đến → điểm đi).
+  create_return: zod.boolean().optional(),
 })
 
 export default function ManageRoutes() {
@@ -55,10 +57,11 @@ export default function ManageRoutes() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(routeSchema),
-    defaultValues: { origin: '', destination: '', distance_km: 0, duration_min: 0, base_price: 0 },
+    defaultValues: { origin: '', destination: '', distance_km: 0, duration_min: 0, base_price: 0, create_return: true },
   })
 
   // Gõ tới đâu tìm tới đó nhưng chỉ gọi API sau khi ngừng gõ 400ms, tránh
@@ -93,7 +96,7 @@ export default function ManageRoutes() {
 
   const handleOpenAdd = () => {
     setEditingRoute(null)
-    reset({ origin: '', destination: '', distance_km: 0, duration_min: 0, base_price: 0 })
+    reset({ origin: '', destination: '', distance_km: 0, duration_min: 0, base_price: 0, create_return: true })
     setDialogOpen(true)
   }
 
@@ -105,6 +108,7 @@ export default function ManageRoutes() {
       distance_km: route.distance_km,
       duration_min: route.duration_min,
       base_price: route.base_price,
+      create_return: false,
     })
     setDialogOpen(true)
   }
@@ -122,12 +126,18 @@ export default function ManageRoutes() {
   const onSubmit = async (data) => {
     setSubmitting(true)
     try {
+      // create_return chỉ có nghĩa khi tạo mới — API sửa tuyến không nhận field này.
+      const { create_return, ...routeData } = data
       if (editingRoute) {
-        await routeApi.update(editingRoute.id, data)
+        await routeApi.update(editingRoute.id, routeData)
         toast.success('Cập nhật tuyến đường thành công!')
       } else {
-        await routeApi.create(data)
-        toast.success('Tạo tuyến đường mới thành công!')
+        const { returnRoute } = await routeApi.create({ ...routeData, create_return: create_return !== false })
+        toast.success(
+          returnRoute
+            ? `Đã tạo tuyến ${routeData.origin} → ${routeData.destination} và tuyến chiều về!`
+            : 'Tạo tuyến đường mới thành công!'
+        )
       }
       fetchRoutes()
       setDialogOpen(false)
@@ -304,6 +314,27 @@ export default function ManageRoutes() {
                   className={errors.base_price ? 'border-[hsl(var(--destructive))]' : ''}
                 />
               </FormField>
+
+              {!editingRoute && (
+                <label
+                  htmlFor="create_return"
+                  className="flex cursor-pointer items-start gap-2.5 rounded-md border border-[hsl(var(--border))] p-3 text-sm"
+                >
+                  <input
+                    id="create_return"
+                    type="checkbox"
+                    {...register('create_return')}
+                    className="mt-0.5 h-4 w-4 accent-[hsl(var(--primary))]"
+                  />
+                  <span>
+                    <span className="font-medium">Tự tạo tuyến chiều về</span>
+                    <span className="block text-xs text-[hsl(var(--muted-foreground))]">
+                      Thêm luôn tuyến {watch('destination') || 'điểm đến'} → {watch('origin') || 'điểm đi'} với
+                      cùng cự ly, thời gian và giá (bỏ qua nếu tuyến này đã tồn tại).
+                    </span>
+                  </span>
+                </label>
+              )}
 
             </div>
 

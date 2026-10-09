@@ -13,14 +13,14 @@ import {
 } from 'recharts'
 import { formatCurrency } from '@/lib/utils'
 
-export default function StatsChart({ data = [], type = 'line', dataKey = 'revenue', name = 'Doanh thu' }) {
+export default function StatsChart({ data = [], type = 'line', dataKey = 'revenue', name = 'Doanh thu', unit = 'vé' }) {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] p-3 rounded-lg shadow-md text-xs">
           <p className="font-semibold text-[hsl(var(--foreground))]">{label}</p>
           <p className="text-[hsl(var(--primary))] font-bold mt-1">
-            {name}: {dataKey.includes('revenue') || dataKey.includes('price') ? formatCurrency(payload[0].value) : `${payload[0].value} vé`}
+            {name}: {dataKey.includes('revenue') || dataKey.includes('price') ? formatCurrency(payload[0].value) : `${payload[0].value} ${unit}`}
           </p>
         </div>
       )

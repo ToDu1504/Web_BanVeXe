@@ -51,6 +51,12 @@ export default function Navbar() {
               Vé của tôi
             </Link>
           )}
+          {isAuthenticated && user?.role === 'driver' && (
+            <Link to="/driver/trips" className="text-sm font-medium text-[hsl(var(--primary))] hover:opacity-95 transition-colors flex items-center gap-1">
+              <Shield className="h-4 w-4" />
+              Lịch chạy
+            </Link>
+          )}
           {isAuthenticated && (user?.role === 'staff' || user?.role === 'admin') && (
             <Link to={user.role === 'admin' ? '/admin/dashboard' : '/staff/invoices'} className="text-sm font-medium text-[hsl(var(--primary))] hover:opacity-95 transition-colors flex items-center gap-1">
               <Shield className="h-4 w-4" />

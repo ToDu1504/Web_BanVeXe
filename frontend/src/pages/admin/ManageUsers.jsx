@@ -23,7 +23,8 @@ import PageHeader from '@/components/common/PageHeader'
 import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
 import { Pagination } from '@/components/ui/pagination'
-import { Search, Trash2, Users } from 'lucide-react'
+import CreateUserDialog from '@/components/features/CreateUserDialog'
+import { Search, Trash2, Users, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { fadeInUp } from '@/lib/motionVariants'
 import { cn } from '@/lib/utils'
@@ -32,12 +33,14 @@ const roleFilters = [
   { value: 'all', label: 'Tất cả' },
   { value: 'customer', label: 'Khách hàng' },
   { value: 'staff', label: 'Nhân viên' },
+  { value: 'driver', label: 'Tài xế' },
   { value: 'admin', label: 'Quản trị viên' },
 ]
 
 const roleSelectTone = {
   customer: '',
   staff: 'text-[hsl(var(--primary))]',
+  driver: 'text-[hsl(var(--accent))]',
   admin: 'text-[hsl(var(--destructive))]',
 }
 
@@ -49,6 +52,7 @@ export default function ManageUsers() {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
+  const [createOpen, setCreateOpen] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 400)
@@ -118,7 +122,12 @@ export default function ManageUsers() {
 
       <PageHeader
         title="Quản Lý Tài Khoản Thành Viên"
-        description="Phân quyền vai trò (Admin, Nhân viên, Khách hàng) và bật/tắt hoạt động của tài khoản."
+        description="Phân quyền vai trò (Admin, Nhân viên, Tài xế, Khách hàng) và bật/tắt hoạt động của tài khoản."
+        action={
+          <Button onClick={() => setCreateOpen(true)} className="font-semibold h-10 shrink-0">
+            <UserPlus className="h-4.5 w-4.5 mr-1.5" /> Thêm tài khoản
+          </Button>
+        }
       />
 
       <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm">
@@ -189,6 +198,7 @@ export default function ManageUsers() {
                         <SelectContent>
                           <SelectItem value="customer">Khách hàng</SelectItem>
                           <SelectItem value="staff">Nhân viên</SelectItem>
+                          <SelectItem value="driver">Tài xế</SelectItem>
                           <SelectItem value="admin">Quản trị viên</SelectItem>
                         </SelectContent>
                       </Select>
@@ -246,6 +256,8 @@ export default function ManageUsers() {
           <Pagination pagination={pagination} onPageChange={setPage} className="mt-4" />
         </CardContent>
       </Card>
+
+      <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={fetchUsers} />
 
     </motion.div>
   )

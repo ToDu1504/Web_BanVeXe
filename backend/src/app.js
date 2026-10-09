@@ -14,6 +14,8 @@ const tripTemplateRoutes = require('./routes/tripTemplate.routes')
 const vehicleRoutes = require('./routes/vehicle.routes')
 const statsRoutes = require('./routes/stats.routes')
 const paymentRoutes = require('./routes/payment.routes')
+const driverRoutes = require('./routes/driver.routes')
+const tripIncidentRoutes = require('./routes/tripIncident.routes')
 
 const app = express()
 
@@ -49,6 +51,8 @@ app.use('/api/trip-templates', tripTemplateRoutes)
 app.use('/api/vehicles', vehicleRoutes)
 app.use('/api/stats', statsRoutes)
 app.use('/api/payments', paymentRoutes)
+app.use('/api/driver', driverRoutes)
+app.use('/api/trip-incidents', tripIncidentRoutes)
 
 // 404 handler
 app.use((req, res, next) => {

@@ -49,6 +49,8 @@ export default function Login() {
         navigate('/admin/dashboard', { replace: true })
       } else if (response.user.role === 'staff') {
         navigate('/staff/invoices', { replace: true })
+      } else if (response.user.role === 'driver') {
+        navigate('/driver/trips', { replace: true })
       } else {
         navigate(from, { replace: true })
       }

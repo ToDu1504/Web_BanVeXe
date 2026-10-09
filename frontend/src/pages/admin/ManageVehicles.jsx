@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { vehicleApi } from '@/api/vehicleApi'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import VehicleDriverCell from '@/components/features/VehicleDriverCell'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -219,7 +220,7 @@ export default function ManageVehicles() {
       <Card className="border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm">
         <CardContent className="pt-6">
           {loading ? (
-            <TableSkeleton rows={5} columns={6} />
+            <TableSkeleton rows={5} columns={7} />
           ) : vehicles.length > 0 ? (
             <Table>
               <TableHeader>
@@ -229,6 +230,7 @@ export default function ManageVehicles() {
                   <TableHead>Loại phương tiện</TableHead>
                   <TableHead>Tổng số ghế</TableHead>
                   <TableHead>Sơ đồ layout</TableHead>
+                  <TableHead>Tài xế</TableHead>
                   <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
@@ -241,6 +243,9 @@ export default function ManageVehicles() {
                     <TableCell className="text-xs">{v.total_seats} ghế</TableCell>
                     <TableCell className="text-xs font-mono text-[hsl(var(--muted-foreground))]">
                       {v.seat_layout ? JSON.stringify(v.seat_layout) : 'Mặc định'}
+                    </TableCell>
+                    <TableCell>
+                      <VehicleDriverCell vehicle={v} />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1.5">

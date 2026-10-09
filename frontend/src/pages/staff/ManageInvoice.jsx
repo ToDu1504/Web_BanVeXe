@@ -468,6 +468,8 @@ export default function ManageInvoice() {
                           {t.Trip && (
                             <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
                               Chuyến: {t.Trip.Route?.origin} → {t.Trip.Route?.destination} ({formatDateTime(t.Trip.departure_time)})
+                              {' · '}Tài xế: {t.Trip.Driver?.full_name || 'chưa phân công'}
+                              {t.Trip.CoDriver && ` · Phụ: ${t.Trip.CoDriver.full_name}`}
                             </p>
                           )}
                         </div>

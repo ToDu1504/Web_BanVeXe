@@ -40,6 +40,16 @@ const TripTemplate = sequelize.define('TripTemplate', {
     type: DataTypes.JSON,
     allowNull: false,
   },
+  // Tài xế mặc định — Trip sinh ra từ mẫu kế thừa giá trị này.
+  driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  // Tài xế phụ mặc định (có hoặc không).
+  co_driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,

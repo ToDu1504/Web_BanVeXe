@@ -13,6 +13,11 @@ export const ticketApi = {
     const response = await axiosInstance.get(`/tickets/${id}/prints`)
     return response.data
   },
+  // Điểm danh khách lên xe (tài xế/staff/admin). boarded: true | false
+  setBoarded: async (id, boarded) => {
+    const response = await axiosInstance.put(`/tickets/${id}/board`, { boarded })
+    return response.data
+  },
   getPrintLog: async (params = {}) => {
     const response = await axiosInstance.get('/tickets/prints', { params })
     return response.data

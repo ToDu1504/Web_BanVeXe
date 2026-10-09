@@ -29,6 +29,13 @@ import ViewTrips from '@/pages/staff/ViewTrips'
 import ViewRoutes from '@/pages/staff/ViewRoutes'
 import ViewVehicles from '@/pages/staff/ViewVehicles'
 import PrintReconciliation from '@/pages/staff/PrintReconciliation'
+import TripIncidents from '@/pages/staff/TripIncidents'
+
+// Driver Protected Pages
+import MyTrips from '@/pages/driver/MyTrips'
+import DriverTripDetail from '@/pages/driver/DriverTripDetail'
+import TripHistory from '@/pages/driver/TripHistory'
+import Unavailability from '@/pages/driver/Unavailability'
 
 // Admin Protected Pages
 import Dashboard from '@/pages/admin/Dashboard'
@@ -126,7 +133,7 @@ export default function AppRouter() {
       <Route
         path="/customer/profile"
         element={
-          <PrivateRoute allowedRoles={['customer', 'staff', 'admin']}>
+          <PrivateRoute allowedRoles={['customer', 'staff', 'admin', 'driver']}>
             <PageLayout>
               <Profile />
             </PageLayout>
@@ -201,6 +208,59 @@ export default function AppRouter() {
           <PrivateRoute allowedRoles={['staff', 'admin']}>
             <AdminLayout>
               <PrintReconciliation />
+            </AdminLayout>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/staff/incidents"
+        element={
+          <PrivateRoute allowedRoles={['staff', 'admin']}>
+            <AdminLayout>
+              <TripIncidents />
+            </AdminLayout>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Driver Routes (Protected) */}
+      <Route
+        path="/driver/trips"
+        element={
+          <PrivateRoute allowedRoles={['driver']}>
+            <AdminLayout>
+              <MyTrips />
+            </AdminLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/driver/trips/:id"
+        element={
+          <PrivateRoute allowedRoles={['driver']}>
+            <AdminLayout>
+              <DriverTripDetail />
+            </AdminLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/driver/history"
+        element={
+          <PrivateRoute allowedRoles={['driver']}>
+            <AdminLayout>
+              <TripHistory />
+            </AdminLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/driver/leave"
+        element={
+          <PrivateRoute allowedRoles={['driver']}>
+            <AdminLayout>
+              <Unavailability />
             </AdminLayout>
           </PrivateRoute>
         }

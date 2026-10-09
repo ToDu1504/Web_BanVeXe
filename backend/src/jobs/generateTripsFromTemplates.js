@@ -1,5 +1,6 @@
 const { TripTemplate, Trip, Route, Vehicle } = require('../models')
 const { findVehicleScheduleConflict } = require('../utils/tripScheduling')
+const { validateDriverAssignment } = require('../utils/driverScheduling')
 
 // How many days ahead to keep the schedule filled in.
 const TRIP_TEMPLATE_ADVANCE_DAYS = Number(process.env.TRIP_TEMPLATE_ADVANCE_DAYS) || 14
@@ -19,6 +20,8 @@ const generateTripsFromTemplates = async () => {
     skippedConflict: 0,
     skippedSeats: 0,
     skippedInactiveResource: 0,
+    // Chuyến vẫn được tạo nhưng bỏ trống tài xế chính/phụ (nghỉ/khóa/trùng lịch).
+    skippedDriverUnavailable: 0,
   }
 
   const templates = await TripTemplate.findAll({
@@ -71,6 +74,27 @@ const generateTripsFromTemplates = async () => {
         continue
       }
 
+      // Tài xế mặc định của mẫu: nếu hôm đó tài xế nghỉ, bị khóa hoặc trùng
+      // lịch thì VẪN sinh chuyến (để không bỏ chuyến của khách) nhưng để trống
+      // tài xế cho Admin phân công người khác.
+      // Áp dụng riêng cho tài xế chính và tài xế phụ: người nào không hợp lệ thì
+      // để trống vị trí đó (nếu tài xế chính trống mà phụ hợp lệ thì phụ lên làm chính).
+      const pickDriver = async (id) => {
+        if (!id) return null
+        const driverError = await validateDriverAssignment({ driverId: id, departureTime: target, arrivalTime })
+        if (driverError) {
+          summary.skippedDriverUnavailable++
+          return null
+        }
+        return id
+      }
+      let driverId = await pickDriver(template.driver_id)
+      let coDriverId = await pickDriver(template.co_driver_id)
+      if (!driverId && coDriverId) {
+        driverId = coDriverId
+        coDriverId = null
+      }
+
       await Trip.create({
         route_id: template.route_id,
         vehicle_id: template.vehicle_id,
@@ -80,6 +104,8 @@ const generateTripsFromTemplates = async () => {
         available_seats: template.available_seats,
         status: 'scheduled',
         template_id: template.id,
+        driver_id: driverId,
+        co_driver_id: coDriverId,
       })
       summary.created++
     }
@@ -90,7 +116,8 @@ const generateTripsFromTemplates = async () => {
     `bỏ qua (đã tồn tại) ${summary.skippedExisting}, ` +
     `bỏ qua (trùng lịch xe) ${summary.skippedConflict}, ` +
     `bỏ qua (vượt sức chứa) ${summary.skippedSeats}, ` +
-    `bỏ qua (tuyến/xe ngừng hoạt động) ${summary.skippedInactiveResource}.`
+    `bỏ qua (tuyến/xe ngừng hoạt động) ${summary.skippedInactiveResource}, ` +
+    `để trống tài xế (nghỉ/trùng lịch) ${summary.skippedDriverUnavailable}.`
   )
 
   return summary

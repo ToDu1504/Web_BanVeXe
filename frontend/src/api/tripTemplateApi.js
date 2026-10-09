@@ -21,8 +21,4 @@ export const tripTemplateApi = {
     const response = await axiosInstance.delete(`/trip-templates/${id}`)
     return response.data
   },
-  generateNow: async () => {
-    const response = await axiosInstance.post('/trip-templates/generate-now')
-    return response.data
-  },
 }

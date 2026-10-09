@@ -16,6 +16,14 @@ import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { fadeInUp } from '@/lib/motionVariants'
 
+// Chuyến đã chạy / quá giờ khởi hành — backend không cho khách tự hủy nữa.
+const hasTripDeparted = (trip) => (
+  !!trip && (['ongoing', 'completed'].includes(trip.status) || new Date(trip.departure_time).getTime() <= Date.now())
+)
+const hasDepartedTicket = (invoice) => (invoice.Tickets || []).some(
+  (ticket) => ticket.booking_status === 'booked' && hasTripDeparted(ticket.Trip),
+)
+
 export default function InvoiceHistory() {
   const navigate = useNavigate()
   const [invoices, setInvoices] = useState([])
@@ -172,7 +180,7 @@ export default function InvoiceHistory() {
                             )}
                           </Button>
                         )}
-                        {(invoice.payment_status === 'pending' || invoice.payment_status === 'paid') && (
+                        {(invoice.payment_status === 'pending' || invoice.payment_status === 'paid') && !hasDepartedTicket(invoice) && (
                           <Button
                             variant="destructive"
                             size="sm"
@@ -270,6 +278,8 @@ export default function InvoiceHistory() {
                                 <Bus className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
                                 <span className="font-medium">
                                   Xe {ticket.Trip.Vehicle?.license_plate} ({ticket.Trip.Vehicle?.vehicle_type === 'sleeper' ? 'Giường nằm' : 'Limousine'})
+                                  {ticket.Trip.Driver && ` · Tài xế ${ticket.Trip.Driver.full_name}`}
+                                  {ticket.Trip.CoDriver && ` · Phụ ${ticket.Trip.CoDriver.full_name}`}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1">
@@ -305,7 +315,7 @@ export default function InvoiceHistory() {
                           </div>
 
                           {/* Individual ticket cancel button */}
-                          {ticket.booking_status === 'booked' && ['pending', 'paid'].includes(selectedInvoice.payment_status) && (
+                          {ticket.booking_status === 'booked' && ['pending', 'paid'].includes(selectedInvoice.payment_status) && !hasTripDeparted(ticket.Trip) && (
                             <div className="flex justify-end pt-2">
                               <Button
                                 variant="destructive"
@@ -328,7 +338,7 @@ export default function InvoiceHistory() {
                 <div className="p-3 bg-[hsl(var(--accent)/0.08)] border border-[hsl(var(--accent)/0.2)] text-[hsl(var(--foreground))] rounded-xl flex gap-2 text-xs">
                   <Info className="h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
                   <p>
-                    Lưu ý: Chỉ có thể hủy vé trước giờ khởi hành tối thiểu <strong>24 giờ</strong>. Vé thuộc hóa đơn đã thanh toán khi hủy sẽ được chuyển sang trạng thái <strong>Đã hoàn tiền</strong>.
+                    Lưu ý: Vé thuộc hóa đơn đã thanh toán khi hủy sẽ được chuyển sang trạng thái <strong>Đã hoàn tiền</strong>.
                   </p>
                 </div>
               </div>

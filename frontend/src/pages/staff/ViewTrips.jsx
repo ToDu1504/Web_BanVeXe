@@ -13,7 +13,8 @@ import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
 import { Pagination } from '@/components/ui/pagination'
 import TripStatus from '@/components/features/TripStatus'
-import { CalendarDays, Search, Eye, Loader2, RefreshCw, Bus, Users, Clock } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { CalendarDays, Search, Eye, Loader2, RefreshCw, Bus, Users, Clock, AlertTriangle } from 'lucide-react'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import { fadeInUp } from '@/lib/motionVariants'
@@ -206,6 +207,16 @@ export default function ViewTrips() {
                         <span className="text-xs text-[hsl(var(--muted-foreground))]">
                           Mã chuyến: TRIP-{trip.id}
                         </span>
+                        <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                          Tài xế: {trip.Driver ? trip.Driver.full_name : 'Chưa phân công'}
+                          {trip.CoDriver && ` · Phụ: ${trip.CoDriver.full_name}`}
+                        </span>
+                        {trip.open_incident_count > 0 && (
+                          <Badge variant="destructive" className="mt-1 flex w-fit items-center gap-1 text-[10px]">
+                            <AlertTriangle className="h-3 w-3" />
+                            {trip.open_incident_count} sự cố chưa xử lý
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-xs">

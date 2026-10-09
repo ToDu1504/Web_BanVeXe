@@ -14,4 +14,7 @@ router.get('/prints', protect, authorize('staff', 'admin'), ticketController.get
 router.get('/:id/prints', protect, authorize('staff', 'admin'), ticketController.getPrintHistory)
 router.post('/:id/print', protect, authorize('staff', 'admin'), validate(schemas.printTicket), ticketController.printTicket)
 
+// Điểm danh khách lên xe — tài xế (chỉ chuyến của mình), staff, admin
+router.put('/:id/board', protect, authorize('driver', 'staff', 'admin'), validate(schemas.setBoarded), ticketController.setBoarded)
+
 module.exports = router

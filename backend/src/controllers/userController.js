@@ -1,7 +1,19 @@
 const crypto = require('crypto')
 const { Op } = require('sequelize')
-const { User, Invoice } = require('../models')
+const {
+  User, Invoice, Trip, TripTemplate, DriverUnavailability, TicketPrint, TripIncident,
+} = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
+const { DEFAULT_TRIP_DURATION_MS, getEffectiveArrivalMs } = require('../utils/tripScheduling')
+const { toVNDateString, isValidDateString } = require('../utils/dateVN')
+
+// Số chuyến sắp/đang chạy còn gắn với tài xế — chặn xóa/đổi role khi > 0.
+const countActiveDriverTrips = (driverId) => Trip.count({
+  where: {
+    [Op.or]: [{ driver_id: driverId }, { co_driver_id: driverId }],
+    status: { [Op.in]: ['scheduled', 'ongoing'] },
+  },
+})
 
 const userController = {
   // @desc    Get all users — paginated when `page` is provided
@@ -93,6 +105,14 @@ const userController = {
         return res.status(400).json({ message: 'Bạn không thể tự đổi quyền hạn của bản thân.' })
       }
 
+      // Không đổi role một tài xế đang còn chuyến được phân công — sẽ để lại
+      // chuyến gắn với người không còn là tài xế.
+      if (user.role === 'driver' && role !== 'driver' && await countActiveDriverTrips(user.id) > 0) {
+        return res.status(400).json({
+          message: 'Tài xế này vẫn còn chuyến được phân công (đang chờ/đang chạy). Hãy gỡ phân công trước khi đổi vai trò.',
+        })
+      }
+
       user.role = role
       await user.save()
 
@@ -159,11 +179,156 @@ const userController = {
         })
       }
 
+      // Tương tự với tài xế còn chuyến đang chờ/đang chạy được phân công.
+      if (user.role === 'driver' && await countActiveDriverTrips(user.id) > 0) {
+        return res.status(400).json({
+          message: 'Không thể xóa tài xế đang được phân công chuyến chờ/đang chạy. Hãy gỡ phân công hoặc khóa tài khoản thay vì xóa.',
+        })
+      }
+
+      // Nhật ký in vé (TicketPrint.printed_by) và sự cố đã báo
+      // (TripIncident.reported_by) là khóa ngoại NOT NULL tới users — xóa sẽ
+      // lỗi FK hoặc mất lịch sử đối soát. Khóa tài khoản thay vì xóa.
+      const [printCount, incidentCount] = await Promise.all([
+        TicketPrint.count({ where: { printed_by: user.id } }),
+        TripIncident.count({ where: { reported_by: user.id } }),
+      ])
+      if (printCount > 0 || incidentCount > 0) {
+        return res.status(400).json({
+          message: 'Không thể xóa tài khoản đã có lịch sử in vé hoặc báo sự cố. Hãy khóa tài khoản thay vì xóa.',
+        })
+      }
+
       await user.destroy()
       return res.status(200).json({ success: true, message: 'Xóa tài khoản thành công.' })
     } catch (error) {
       console.error('Lỗi user delete:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi xóa tài khoản.' })
+    }
+  },
+
+  // @desc    Danh sách tài xế đang hoạt động để Admin phân công chuyến, kèm gợi ý:
+  //          `unavailable` (nghỉ ngày đó), `busy_trip` (trùng giờ chuyến khác khi
+  //          có departure_time/arrival_time), `is_vehicle_regular` (tài xế quen của
+  //          vehicle_id). Đã sắp xếp: quen & trống → trống → bận/nghỉ.
+  // @route   GET /api/users/drivers?date=&departure_time=&arrival_time=&exclude_trip_id=&vehicle_id=
+  // @access  Private/Admin
+  getDrivers: async (req, res) => {
+    try {
+      const drivers = await User.findAll({
+        where: { role: 'driver', is_active: true },
+        attributes: ['id', 'full_name', 'phone', 'email'],
+        order: [['full_name', 'ASC']],
+      })
+
+      const { departure_time, arrival_time, exclude_trip_id, vehicle_id } = req.query
+      const departure = departure_time ? new Date(departure_time) : null
+      if (departure && Number.isNaN(departure.getTime())) {
+        return res.status(400).json({ message: 'Giờ khởi hành không hợp lệ.' })
+      }
+      const date = req.query.date || (departure ? toVNDateString(departure) : null)
+
+      // Đang nghỉ ngày khởi hành
+      let unavailableIds = new Set()
+      if (date) {
+        if (!isValidDateString(date)) {
+          return res.status(400).json({ message: 'Ngày không đúng định dạng YYYY-MM-DD.' })
+        }
+        const rows = await DriverUnavailability.findAll({
+          where: { start_date: { [Op.lte]: date }, end_date: { [Op.gte]: date } },
+          attributes: ['driver_id'],
+        })
+        unavailableIds = new Set(rows.map((r) => r.driver_id))
+      }
+
+      // Bận chuyến khác trùng khung giờ — 1 truy vấn cho mọi tài xế (cùng quy tắc
+      // chồng giờ với findDriverScheduleConflict)
+      const busyByDriver = new Map()
+      if (departure) {
+        const newStart = departure.getTime()
+        const arrival = arrival_time ? new Date(arrival_time) : null
+        const newEnd = arrival && !Number.isNaN(arrival.getTime())
+          ? arrival.getTime()
+          : newStart + DEFAULT_TRIP_DURATION_MS
+        const where = {
+          [Op.or]: [{ driver_id: { [Op.ne]: null } }, { co_driver_id: { [Op.ne]: null } }],
+          status: { [Op.ne]: 'cancelled' },
+          // chuyến dài nhất ~20h → lùi 2 ngày là đủ bắt mọi chuyến còn chạy tới newStart
+          departure_time: { [Op.lt]: new Date(newEnd), [Op.gt]: new Date(newStart - 2 * 24 * 60 * 60 * 1000) },
+        }
+        if (exclude_trip_id) where.id = { [Op.ne]: exclude_trip_id }
+        const trips = await Trip.findAll({ where, attributes: ['id', 'driver_id', 'co_driver_id', 'departure_time', 'arrival_time'] })
+        for (const trip of trips) {
+          if (getEffectiveArrivalMs(trip) <= newStart) continue
+          for (const id of [trip.driver_id, trip.co_driver_id]) {
+            if (id && !busyByDriver.has(id)) {
+              busyByDriver.set(id, { id: trip.id, departure_time: trip.departure_time })
+            }
+          }
+        }
+      }
+
+      // Tài xế quen của xe: tài xế mặc định của mẫu chuyến + tài xế các chuyến gần nhất
+      const regularIds = new Set()
+      const regularMainIds = new Set() // thường lái chính xe này
+      if (vehicle_id) {
+        const templates = await TripTemplate.findAll({
+          where: { vehicle_id },
+          attributes: ['driver_id', 'co_driver_id'],
+        })
+        const recent = await Trip.findAll({
+          where: { vehicle_id, driver_id: { [Op.ne]: null } },
+          attributes: ['driver_id', 'co_driver_id'],
+          order: [['departure_time', 'DESC']],
+          limit: 10,
+        })
+        for (const row of [...templates, ...recent]) {
+          if (row.driver_id) {
+            regularIds.add(row.driver_id)
+            regularMainIds.add(row.driver_id)
+          }
+          if (row.co_driver_id) regularIds.add(row.co_driver_id)
+        }
+      }
+
+      const result = drivers.map((d) => ({
+        ...d.toJSON(),
+        unavailable: unavailableIds.has(d.id),
+        busy_trip: busyByDriver.get(d.id) || null,
+        is_vehicle_regular: regularIds.has(d.id),
+      }))
+      // Tài xế quen của xe & trống lịch → trống lịch → bận/nghỉ
+      // (tài xế chính quen của xe xếp trước tài xế phụ quen để ô tự điền chọn đúng người)
+      const rank = (d) => {
+        if (d.unavailable || d.busy_trip) return 3
+        if (regularMainIds.has(d.id)) return 0
+        return d.is_vehicle_regular ? 1 : 2
+      }
+      result.sort((a, b) => rank(a) - rank(b) || a.full_name.localeCompare(b.full_name, 'vi'))
+
+      return res.status(200).json(result)
+    } catch (error) {
+      console.error('Lỗi user getDrivers:', error)
+      return res.status(500).json({ message: 'Lỗi máy chủ khi tải danh sách tài xế.' })
+    }
+  },
+
+  // @desc    Ngày nghỉ (từ hôm nay trở đi) của một tài xế — Admin xem khi phân công
+  // @route   GET /api/users/:id/unavailabilities
+  // @access  Private/Admin
+  getDriverUnavailabilities: async (req, res) => {
+    try {
+      const rows = await DriverUnavailability.findAll({
+        where: {
+          driver_id: req.params.id,
+          end_date: { [Op.gte]: toVNDateString() },
+        },
+        order: [['start_date', 'ASC']],
+      })
+      return res.status(200).json(rows)
+    } catch (error) {
+      console.error('Lỗi user getDriverUnavailabilities:', error)
+      return res.status(500).json({ message: 'Lỗi máy chủ khi tải ngày nghỉ của tài xế.' })
     }
   },
 

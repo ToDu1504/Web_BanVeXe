@@ -1,6 +1,69 @@
 const { Op } = require('sequelize')
-const { Vehicle, Trip } = require('../models')
+const { Vehicle, Trip, TripTemplate, User } = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
+
+const DRIVER_ATTRIBUTES = ['id', 'full_name', 'phone']
+
+// Gắn thông tin tài xế cho trang danh sách xe (truy vấn gộp, không include
+// hasMany để không làm hỏng limit/offset):
+//   - current_driver / current_co_driver / current_trip: tài xế của chuyến đang chạy, nếu không có
+//     thì của chuyến sắp khởi hành gần nhất của xe.
+//   - regular_drivers: tài xế mặc định trên các mẫu chuyến của xe (đội thay ca).
+const withDriverInfo = async (vehicles) => {
+  const ids = vehicles.map((v) => v.id)
+  if (ids.length === 0) return []
+
+  const trips = await Trip.findAll({
+    where: {
+      vehicle_id: { [Op.in]: ids },
+      driver_id: { [Op.ne]: null },
+      [Op.or]: [
+        { status: 'ongoing' },
+        { status: 'scheduled', departure_time: { [Op.gte]: new Date() } },
+      ],
+    },
+    include: [
+      { model: User, as: 'Driver', attributes: DRIVER_ATTRIBUTES },
+      { model: User, as: 'CoDriver', attributes: DRIVER_ATTRIBUTES },
+    ],
+    order: [['departure_time', 'ASC']],
+  })
+  const currentByVehicle = new Map()
+  for (const trip of trips) {
+    const existing = currentByVehicle.get(trip.vehicle_id)
+    // Chuyến đang chạy luôn được ưu tiên hơn chuyến sắp chạy
+    if (!existing || (trip.status === 'ongoing' && existing.status !== 'ongoing')) {
+      currentByVehicle.set(trip.vehicle_id, trip)
+    }
+  }
+
+  const templates = await TripTemplate.findAll({
+    where: { vehicle_id: { [Op.in]: ids } },
+    include: [
+      { model: User, as: 'Driver', attributes: DRIVER_ATTRIBUTES },
+      { model: User, as: 'CoDriver', attributes: DRIVER_ATTRIBUTES },
+    ],
+  })
+  const regularByVehicle = new Map()
+  for (const template of templates) {
+    for (const person of [template.Driver, template.CoDriver]) {
+      if (!person) continue
+      if (!regularByVehicle.has(template.vehicle_id)) regularByVehicle.set(template.vehicle_id, new Map())
+      regularByVehicle.get(template.vehicle_id).set(person.id, person.toJSON())
+    }
+  }
+
+  return vehicles.map((vehicle) => {
+    const trip = currentByVehicle.get(vehicle.id)
+    return {
+      ...vehicle.toJSON(),
+      current_driver: trip?.Driver ? trip.Driver.toJSON() : null,
+      current_co_driver: trip?.CoDriver ? trip.CoDriver.toJSON() : null,
+      current_trip: trip ? { id: trip.id, status: trip.status, departure_time: trip.departure_time } : null,
+      regular_drivers: [...(regularByVehicle.get(vehicle.id)?.values() || [])],
+    }
+  })
+}
 
 const vehicleController = {
   // @desc    Get all vehicles — paginated when `page` is provided, otherwise
@@ -27,7 +90,10 @@ const vehicleController = {
 
       const { page, limit, offset } = getPagination(req.query)
       const { rows, count } = await Vehicle.findAndCountAll({ where, order, limit, offset })
-      return res.status(200).json({ data: rows, pagination: buildPaginationMeta(page, limit, count) })
+      return res.status(200).json({
+        data: await withDriverInfo(rows),
+        pagination: buildPaginationMeta(page, limit, count),
+      })
     } catch (error) {
       console.error('Lỗi vehicle getAll:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi lấy danh sách phương tiện.' })

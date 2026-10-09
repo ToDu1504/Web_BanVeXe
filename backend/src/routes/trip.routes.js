@@ -12,7 +12,7 @@ router.get('/:id/booked-seats', tripController.getBookedSeats)
 router.get('/:id', tripController.getById)
 
 // Protected management routes
-router.get('/:id/tickets', protect, authorize('staff', 'admin'), tripController.getPassengers)
+router.get('/:id/tickets', protect, authorize('staff', 'admin', 'driver'), tripController.getPassengers)
 router.get('/', protect, authorize('staff', 'admin'), tripController.getAll)
 router.post('/', protect, authorize('admin'), validate(schemas.createTrip), tripController.create)
 router.put('/:id', protect, authorize('admin'), validate(schemas.updateTrip), tripController.update)

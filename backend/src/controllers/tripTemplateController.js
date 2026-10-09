@@ -1,6 +1,22 @@
-const { TripTemplate, Route, Vehicle } = require('../models')
+const { Op } = require('sequelize')
+const { TripTemplate, Trip, Ticket, Route, Vehicle, User } = require('../models')
 const { generateTripsFromTemplates } = require('../jobs/generateTripsFromTemplates')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
+
+// Tài xế mặc định / tài xế phụ của mẫu: phải là tài khoản tài xế đang hoạt động,
+// và tài xế phụ khác tài xế chính. Trả về message lỗi hoặc null.
+const validateTemplateDrivers = async (driverId, coDriverId) => {
+  if (coDriverId && !driverId) return 'Hãy chọn tài xế chính trước khi chọn tài xế phụ.'
+  if (driverId && coDriverId && Number(driverId) === Number(coDriverId)) return 'Tài xế phụ phải khác tài xế chính.'
+  for (const id of [driverId, coDriverId]) {
+    if (!id) continue
+    const driver = await User.findByPk(id)
+    if (!driver || driver.role !== 'driver' || !driver.is_active) {
+      return 'Tài xế của mẫu chuyến phải là tài khoản tài xế đang hoạt động.'
+    }
+  }
+  return null
+}
 
 const tripTemplateController = {
   // @desc    Get all trip templates — paginated when `page` is provided
@@ -8,7 +24,12 @@ const tripTemplateController = {
   // @access  Private/Staff/Admin
   getAll: async (req, res) => {
     try {
-      const include = [Route, Vehicle]
+      const include = [
+        Route,
+        Vehicle,
+        { model: User, as: 'Driver', attributes: ['id', 'full_name', 'phone'], required: false },
+        { model: User, as: 'CoDriver', attributes: ['id', 'full_name', 'phone'], required: false },
+      ]
       const order = [['id', 'DESC']]
 
       if (!req.query.page) {
@@ -50,7 +71,7 @@ const tripTemplateController = {
     try {
       const {
         route_id, vehicle_id, departure_time_of_day, duration_minutes,
-        price, available_seats, days_of_week, is_active,
+        price, available_seats, days_of_week, driver_id, co_driver_id, is_active,
       } = req.body
 
       const vehicle = await Vehicle.findByPk(vehicle_id)
@@ -63,6 +84,9 @@ const tripTemplateController = {
         })
       }
 
+      const driverError = await validateTemplateDrivers(driver_id, co_driver_id)
+      if (driverError) return res.status(400).json({ message: driverError })
+
       const template = await TripTemplate.create({
         route_id,
         vehicle_id,
@@ -71,8 +95,13 @@ const tripTemplateController = {
         price,
         available_seats,
         days_of_week,
+        driver_id: driver_id || null,
+        co_driver_id: co_driver_id || null,
         is_active: is_active !== undefined ? is_active : true,
       })
+
+      // Generate its trips immediately instead of waiting for the next job tick
+      await generateTripsFromTemplates()
 
       return res.status(201).json(template)
     } catch (error) {
@@ -88,12 +117,21 @@ const tripTemplateController = {
     try {
       const {
         route_id, vehicle_id, departure_time_of_day, duration_minutes,
-        price, available_seats, days_of_week, is_active,
+        price, available_seats, days_of_week, driver_id, co_driver_id, is_active,
       } = req.body
       const template = await TripTemplate.findByPk(req.params.id)
 
       if (!template) {
         return res.status(404).json({ message: 'Không tìm thấy mẫu chuyến lặp lại.' })
+      }
+
+      // Chỉ kiểm tra khi đổi tài xế (VD bật/tắt mẫu không cần kiểm tra lại)
+      if (driver_id !== undefined || co_driver_id !== undefined) {
+        const driverError = await validateTemplateDrivers(
+          driver_id !== undefined ? driver_id : template.driver_id,
+          co_driver_id !== undefined ? co_driver_id : template.co_driver_id,
+        )
+        if (driverError) return res.status(400).json({ message: driverError })
       }
 
       const effectiveVehicleId = vehicle_id !== undefined ? vehicle_id : template.vehicle_id
@@ -118,9 +156,31 @@ const tripTemplateController = {
       template.price = price !== undefined ? price : template.price
       template.available_seats = available_seats !== undefined ? available_seats : template.available_seats
       template.days_of_week = days_of_week !== undefined ? days_of_week : template.days_of_week
+      if (driver_id !== undefined) template.driver_id = driver_id
+      if (co_driver_id !== undefined) template.co_driver_id = co_driver_id
       template.is_active = is_active !== undefined ? is_active : template.is_active
 
       await template.save()
+
+      // Rebuild the not-yet-sold future trips of this template so the edit
+      // shows up in search right away. Without this the old trips stay as-is
+      // and, still occupying the vehicle, make the new schedule lose to
+      // findVehicleScheduleConflict. Trips that already have tickets are kept
+      // untouched so no sold seat/payment history is lost.
+      const futureTrips = await Trip.findAll({
+        where: {
+          template_id: template.id,
+          status: 'scheduled',
+          departure_time: { [Op.gt]: new Date() },
+        },
+        include: [{ model: Ticket, attributes: ['id'], required: false }],
+      })
+      const unsoldIds = futureTrips.filter((trip) => trip.Tickets.length === 0).map((trip) => trip.id)
+      if (unsoldIds.length > 0) {
+        await Trip.destroy({ where: { id: unsoldIds } })
+      }
+      await generateTripsFromTemplates()
+
       return res.status(200).json(template)
     } catch (error) {
       console.error('Lỗi trip template update:', error)
@@ -144,19 +204,6 @@ const tripTemplateController = {
     } catch (error) {
       console.error('Lỗi trip template delete:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi xóa mẫu chuyến lặp lại.' })
-    }
-  },
-
-  // @desc    Force an immediate generation pass instead of waiting for the interval
-  // @route   POST /api/trip-templates/generate-now
-  // @access  Private/Admin
-  generateNow: async (req, res) => {
-    try {
-      const summary = await generateTripsFromTemplates()
-      return res.status(200).json(summary)
-    } catch (error) {
-      console.error('Lỗi trip template generateNow:', error)
-      return res.status(500).json({ message: 'Lỗi máy chủ khi sinh chuyến xe từ mẫu lặp lại.' })
     }
   },
 }

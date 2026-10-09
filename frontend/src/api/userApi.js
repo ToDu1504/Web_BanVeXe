@@ -21,6 +21,13 @@ export const userApi = {
     const response = await axiosInstance.delete(`/users/${id}`)
     return response.data
   },
+  // Tài xế đang hoạt động để phân công chuyến. params (tùy chọn): date | departure_time,
+  // arrival_time, exclude_trip_id, vehicle_id → mỗi tài xế kèm unavailable, busy_trip,
+  // is_vehicle_regular (đã sắp xếp: quen & trống → trống → bận).
+  getDrivers: async (params) => {
+    const response = await axiosInstance.get('/users/drivers', { params })
+    return response.data
+  },
   searchCustomers: async (phone) => {
     const response = await axiosInstance.get('/users/customers/search', { params: { phone } })
     return response.data

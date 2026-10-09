@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { tripApi } from '@/api/tripApi'
 import { routeApi } from '@/api/routeApi'
 import { vehicleApi } from '@/api/vehicleApi'
+import { userApi } from '@/api/userApi'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { FormField } from '@/components/ui/form-field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -27,10 +30,11 @@ import EmptyState from '@/components/common/EmptyState'
 import { Pagination } from '@/components/ui/pagination'
 import TripStatus from '@/components/features/TripStatus'
 import TripPassengersDialog from '@/components/features/TripPassengersDialog'
+import DriverSelect from '@/components/features/DriverSelect'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod'
-import { Plus, Edit2, Trash2, CalendarDays, Loader2, ArrowRight, RefreshCw, Search, Users } from 'lucide-react'
+import { Plus, Edit2, Trash2, CalendarDays, Loader2, ArrowRight, RefreshCw, Search, Users, AlertTriangle } from 'lucide-react'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import { fadeInUp } from '@/lib/motionVariants'
@@ -43,6 +47,10 @@ const tripSchema = zod.object({
   price: zod.coerce.number().min(1000, 'Giá vé tối thiểu là 1,000đ'),
   available_seats: zod.coerce.number().min(1, 'Số ghế trống tối thiểu là 1'),
   status: zod.enum(['scheduled', 'ongoing', 'completed', 'cancelled']),
+  // Tài xế phụ trách (null = chưa phân công)
+  driver_id: zod.number().nullable().optional(),
+  // Tài xế phụ — có hoặc không
+  co_driver_id: zod.number().nullable().optional(),
 })
 
 export default function ManageTrips() {
@@ -51,6 +59,7 @@ export default function ManageTrips() {
   const [page, setPage] = useState(1)
   const [routes, setRoutes] = useState([])
   const [vehicles, setVehicles] = useState([])
+  const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -71,6 +80,7 @@ export default function ManageTrips() {
     setValue,
     watch,
     reset,
+    getValues,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(tripSchema),
@@ -82,12 +92,17 @@ export default function ManageTrips() {
       price: 0,
       available_seats: 0,
       status: 'scheduled',
+      driver_id: null,
+      co_driver_id: null,
     },
   })
 
   // Watch fields for automatic defaults
   const watchedRouteId = watch('route_id')
   const watchedVehicleId = watch('vehicle_id')
+  const watchedDeparture = watch('departure_time')
+  const watchedDriverId = watch('driver_id')
+  const watchedCoDriverId = watch('co_driver_id')
 
   // Set default pricing/seats based on route/vehicle selection
   useEffect(() => {
@@ -103,6 +118,46 @@ export default function ManageTrips() {
       if (selectedVehicle) setValue('available_seats', selectedVehicle.total_seats)
     }
   }, [watchedVehicleId, vehicles, editingTrip, setValue])
+
+  // Đề xuất tài xế theo khung giờ + xe đang chọn: backend trả về mỗi tài xế kèm
+  // `unavailable` (nghỉ ngày đó), `busy_trip` (trùng giờ chuyến khác) và
+  // `is_vehicle_regular` (tài xế quen của xe), đã sắp xếp quen & trống → trống → bận.
+  const watchedArrival = watch('arrival_time')
+  // true khi admin tự chọn tài xế — khi đó không tự điền đè lựa chọn của họ nữa
+  const driverTouchedRef = useRef(false)
+  const toIso = (local) => (local && local.length >= 16 ? new Date(local).toISOString() : undefined)
+
+  useEffect(() => {
+    if (!dialogOpen) return
+    let cancelled = false
+    const timer = setTimeout(() => {
+      userApi.getDrivers({
+        departure_time: toIso(watchedDeparture),
+        arrival_time: toIso(watchedArrival),
+        vehicle_id: watchedVehicleId || undefined,
+        exclude_trip_id: editingTrip?.id,
+      })
+        .then((data) => {
+          if (cancelled) return
+          setDrivers(data)
+          // Tự điền khi tạo mới và admin chưa tự chọn: tài xế đầu danh sách nếu
+          // trống lịch (ưu tiên tài xế quen của xe), ngược lại để trống.
+          if (!editingTrip && !driverTouchedRef.current && toIso(watchedDeparture)) {
+            const best = data.find((d) => !d.unavailable && !d.busy_trip)
+            setValue('driver_id', best ? best.id : null)
+            // Tài xế phụ không tự điền; nếu người đang chọn giờ bị bận/trùng thì bỏ chọn
+            const co = data.find((d) => d.id === getValues('co_driver_id'))
+            if (co && (co.unavailable || co.busy_trip || co.id === best?.id)) setValue('co_driver_id', null)
+          }
+        })
+        .catch(() => { if (!cancelled) setDrivers([]) })
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [dialogOpen, watchedDeparture, watchedArrival, watchedVehicleId, editingTrip, setValue])
+
 
   // Gõ tới đâu tìm tới đó nhưng chỉ gọi API sau khi ngừng gõ 400ms.
   useEffect(() => {
@@ -146,6 +201,7 @@ export default function ManageTrips() {
 
   const handleOpenAdd = () => {
     setEditingTrip(null)
+    driverTouchedRef.current = false
     reset({
       route_id: 0,
       vehicle_id: 0,
@@ -154,12 +210,15 @@ export default function ManageTrips() {
       price: 0,
       available_seats: 0,
       status: 'scheduled',
+      driver_id: null,
+      co_driver_id: null,
     })
     setDialogOpen(true)
   }
 
   const handleOpenEdit = (trip) => {
     setEditingTrip(trip)
+    driverTouchedRef.current = true // giữ nguyên tài xế đã phân công
 
     // Format dates to fit <input type="datetime-local"> (yyyy-MM-ddThh:mm)
     const formatLocal = (dtStr) => {
@@ -177,6 +236,8 @@ export default function ManageTrips() {
       price: trip.price,
       available_seats: trip.available_seats,
       status: trip.status,
+      driver_id: trip.driver_id ?? null,
+      co_driver_id: trip.co_driver_id ?? null,
     })
     setDialogOpen(true)
   }
@@ -285,6 +346,7 @@ export default function ManageTrips() {
                   <TableHead>Mã</TableHead>
                   <TableHead>Tuyến chạy</TableHead>
                   <TableHead>Phương tiện</TableHead>
+                  <TableHead>Tài xế</TableHead>
                   <TableHead>Khởi hành</TableHead>
                   <TableHead>Giá vé</TableHead>
                   <TableHead>Ghế trống</TableHead>
@@ -310,6 +372,26 @@ export default function ManageTrips() {
                           {vehicleTypeLabels[trip.Vehicle?.vehicle_type]}
                         </span>
                       </div>
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {trip.Driver ? (
+                        <span className="font-semibold">
+                          {trip.Driver.full_name}
+                          {trip.CoDriver && (
+                            <span className="block text-[10px] font-normal text-[hsl(var(--muted-foreground))]">
+                              Phụ: {trip.CoDriver.full_name}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-[hsl(var(--muted-foreground))]">Chưa phân công</span>
+                      )}
+                      {trip.open_incident_count > 0 && (
+                        <Badge variant="destructive" className="mt-1 flex w-fit items-center gap-1 text-[10px]">
+                          <AlertTriangle className="h-3 w-3" />
+                          {trip.open_incident_count} sự cố
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs">{formatDateTime(trip.departure_time)}</TableCell>
                     <TableCell className="font-semibold text-xs text-[hsl(var(--primary))]">
@@ -432,19 +514,21 @@ export default function ManageTrips() {
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField label="Giờ khởi hành" htmlFor="departure_time" error={errors.departure_time?.message}>
-                  <Input
+                  <DateInput
                     id="departure_time"
                     type="datetime-local"
                     {...register('departure_time')}
+                    value={watch('departure_time') ?? ''}
                     className={errors.departure_time ? 'border-[hsl(var(--destructive))]' : ''}
                   />
                 </FormField>
 
                 <FormField label="Giờ đến (Dự kiến)" htmlFor="arrival_time">
-                  <Input
+                  <DateInput
                     id="arrival_time"
                     type="datetime-local"
                     {...register('arrival_time')}
+                    value={watch('arrival_time') ?? ''}
                   />
                 </FormField>
               </div>
@@ -468,6 +552,39 @@ export default function ManageTrips() {
                   />
                 </FormField>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Tài xế chính" htmlFor="driver-select">
+                  <DriverSelect
+                    id="driver-select"
+                    value={watchedDriverId}
+                    onChange={(val) => {
+                      driverTouchedRef.current = true
+                      setValue('driver_id', val, { shouldValidate: true })
+                      if (!val) setValue('co_driver_id', null) // không có tài xế chính thì bỏ luôn tài xế phụ
+                    }}
+                    drivers={drivers}
+                    excludeId={watchedCoDriverId}
+                    keepIds={[editingTrip?.driver_id, editingTrip?.co_driver_id].filter(Boolean)}
+                  />
+                </FormField>
+                <FormField label="Tài xế phụ (không bắt buộc)" htmlFor="co-driver-select">
+                  <DriverSelect
+                    id="co-driver-select"
+                    value={watchedCoDriverId}
+                    onChange={(val) => setValue('co_driver_id', val, { shouldValidate: true })}
+                    drivers={watchedDriverId ? drivers : []}
+                    excludeId={watchedDriverId}
+                    keepIds={[editingTrip?.driver_id, editingTrip?.co_driver_id].filter(Boolean)}
+                    noneLabel={watchedDriverId ? 'Không có tài xế phụ' : 'Chọn tài xế chính trước'}
+                  />
+                </FormField>
+              </div>
+              {!editingTrip && !watchedDeparture && (
+                <p className="-mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+                  Nhập giờ khởi hành (và giờ đến) để hệ thống đề xuất tài xế trống lịch.
+                </p>
+              )}
 
               <FormField label="Trạng thái vận hành" htmlFor="trip-status">
                 <Select
