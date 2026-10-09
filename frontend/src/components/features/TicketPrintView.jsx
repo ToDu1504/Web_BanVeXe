@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { Printer } from 'lucide-react'
+import { describePickup } from '@/lib/shuttle'
 
 const vehicleTypeLabels = {
   sleeper: 'Giường nằm',
@@ -70,6 +71,8 @@ export default function TicketPrintView({ open, onOpenChange, ticket }) {
             <span className="text-right font-medium">{ticket.passenger_name}</span>
             <span className="text-[hsl(var(--muted-foreground))]">Số điện thoại</span>
             <span className="text-right font-medium">{ticket.passenger_phone}</span>
+            <span className="text-[hsl(var(--muted-foreground))]">Lên xe tại</span>
+            <span className="text-right font-medium">{describePickup(ticket, route)}</span>
             <span className="text-[hsl(var(--muted-foreground))]">Giá vé</span>
             <span className="text-right font-bold text-[hsl(var(--primary))]">{formatCurrency(ticket.ticket_price)}</span>
           </div>

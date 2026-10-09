@@ -65,9 +65,9 @@ bus-ticket-system/
 │   │   │   ├── vehicle.routes.js
 │   │   │   ├── stats.routes.js
 │   │   │   └── payment.routes.js    # [MỚI] /api/payments/momo/*
-│   │   ├── scripts/            # [MỚI] Script chạy tay qua npm run db:*
-│   │   │   ├── syncDb.js       # Đồng bộ Sequelize models → MySQL (force: true — xóa sạch dữ liệu)
-│   │   │   ├── addDriverFeatures.js # [MỚI] Migration bổ sung (idempotent, giữ dữ liệu) cho role tài xế/điểm danh/sự cố/ngày nghỉ
+│   │   ├── db/                 # [MỚI] migrator.js (umzug), safety.js (rào chắn lệnh xóa dữ liệu), backup.js (mysqldump)
+│   │   ├── scripts/            # Script chạy tay qua npm run db:*
+│   │   │   ├── createDb.js, migrate.js, resetDb.js, backupDb.js, restoreDb.js  # [MỚI] quản lý DB
 │   │   │   ├── seedDrivers.js  # [MỚI] Tạo sẵn 2 tài xế/xe + gán vào mẫu chuyến & chuyến sắp chạy (idempotent, giữ dữ liệu)
 │   │   │   └── seedData.js     # Seed dữ liệu mẫu (gọi seedDrivers → taixe1/taixe2.<biển số>@datvexekhach.vn)
 │   │   ├── utils/
@@ -77,6 +77,7 @@ bus-ticket-system/
 │   │   │   ├── driverScheduling.js # [MỚI] validateDriverAssignment (tài xế hợp lệ, không nghỉ, không trùng lịch)
 │   │   │   └── dateVN.js       # [MỚI] Ngày giờ theo múi giờ VN (tuần bắt đầu Thứ 2) dùng cho lịch tài xế
 │   │   └── app.js
+│   ├── migrations/             # [MỚI] Migration có phiên bản — nguồn chuẩn của schema
 │   ├── .env
 │   ├── package.json
 │   └── server.js
@@ -176,221 +177,34 @@ bus-ticket-system/
 
 ---
 
-## 🗄️ Database (MySQL)
+## 🗄️ Database (MySQL / MariaDB)
 
-Chạy lần lượt các lệnh SQL sau:
+Schema được quản lý bằng **migration có phiên bản** (umzug) trong `backend/migrations/` — đó là nguồn chuẩn của schema
+(bảng, khóa ngoại, CHECK, index). Thiết kế chi tiết, sơ đồ ERD, chính sách khóa ngoại và quy trình sao lưu:
+[md/ThietKeDatabase.md](md/ThietKeDatabase.md). Không còn dùng `sequelize.sync()`.
+
+**Cài đặt lần đầu** (XAMPP MariaDB 10.4 hoặc MySQL 8.x, mặc định `root` / mật khẩu rỗng):
+
+```bash
+cd backend
+cp .env.example .env          # điền DB_PASS, JWT_SECRET...; DB_NAME=bus_ticket_dev
+npm run db:create             # tạo database utf8mb4
+npm run db:migrate            # tạo toàn bộ bảng
+npm run db:seed -- --yes      # nạp dữ liệu mẫu (xóa dữ liệu cũ)
+```
 
 > **Lưu ý thiết kế DB:**
-> - `invoices` = 1 lần thanh toán (có thể chứa nhiều vé).
+> - `invoices` = 1 lần thanh toán (có thể chứa nhiều vé); `paid_at` = thời điểm thanh toán (bắt buộc khi `paid`/`refunded`).
 > - `tickets` = 1 ghế cụ thể (quan hệ N-1 với `invoices`).
-> - `UNIQUE(trip_id, active_seat_number)` ngăn chặn **double booking** ở tầng DB (chỉ áp dụng cho vé đang `booked`, vé `cancelled` có `active_seat_number = NULL` nên không chặn bán lại ghế).
-> - `ticket_prints` = lịch sử **mọi** lần in vé (không chỉ lần gần nhất) — `tickets.issued_at/issued_by/print_count` chỉ là cache để hiển thị nhanh, nguồn dữ liệu thật để đối soát cuối ca là bảng này.
-> - [MỚI] `trips.driver_id` / `trip_templates.driver_id` = tài xế được phân công (user có `role = 'driver'`), `NULL` nếu chưa phân công. Trip sinh từ template kế thừa `driver_id` của template. Xóa tài xế chỉ gỡ liên kết (`ON DELETE SET NULL`).
-> - [MỚI] `trips.reminder_sent_at` = cờ idempotent của job gửi mail nhắc chuyến — đã có giá trị thì job không gửi lại.
-> - [MỚI] `trips.actual_departure_at` / `actual_arrival_at` = giờ chạy **thực tế** do tài xế bấm "Bắt đầu chạy"/"Hoàn thành" (khác `departure_time`/`arrival_time` là giờ theo lịch).
-> - [MỚI] `tickets.boarded_at` / `boarded_by` = điểm danh khách đã lên xe (NULL = chưa lên). Chỉ áp dụng cho vé `booked`.
-> - [MỚI] `trip_incidents` = sự cố/trễ chuyến tài xế báo; `driver_unavailabilities` = khoảng ngày tài xế nghỉ, không được phân công chuyến.
+> - `UNIQUE(trip_id, active_seat_number)` ngăn chặn **double booking** ở tầng DB (chỉ áp dụng cho vé đang `booked`, vé `cancelled` có `active_seat_number = NULL` nên không chặn bán lại ghế). CHECK `chk_tickets_active_seat` bắt buộc `active_seat_number` luôn khớp `booking_status`.
+> - `ticket_prints` = lịch sử **mọi** lần in vé — `tickets.issued_at/issued_by/print_count` chỉ là cache, nguồn đối soát cuối ca là bảng này.
+> - **Khóa ngoại**: `RESTRICT` cho lịch sử tiền/vé (users→invoices→tickets, trips→tickets, routes/vehicles→trips, ticket_prints) — DB tự chặn xóa làm mất lịch sử, kể cả khi xóa thẳng bằng SQL/phpMyAdmin; `SET NULL` cho tài xế/người thao tác; `CASCADE` cho dữ liệu phụ (mẫu chuyến, sự cố, ngày nghỉ).
+> - **CHECK**: ghế trống không âm, giá > 0, giờ đến sau giờ đi, vé trung chuyển phải có địa chỉ, sự cố trễ phải có số phút… (danh sách đầy đủ trong migration baseline).
+> - `trips.driver_id` / `co_driver_id`, `trip_templates.driver_id` / `co_driver_id` = tài xế chính/phụ (`role = 'driver'`); `trips.reminder_sent_at`, `shuttle_locked_at` = cờ idempotent của các job; `actual_departure_at` / `actual_arrival_at` = giờ chạy thực tế.
+> - `tickets.boarded_at/boarded_by` = điểm danh; `tickets.pickup_*` = cách lên xe (tự đến bến / xe trung chuyển); `trip_incidents` = sự cố; `driver_unavailabilities` = ngày nghỉ tài xế.
 
-```sql
-CREATE DATABASE bus_ticket_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE bus_ticket_db;
-
--- =============================================
--- BẢNG NGƯỜI DÙNG
--- =============================================
-CREATE TABLE users (
-    id          INT AUTO_INCREMENT PRIMARY KEY,
-    full_name   VARCHAR(100)        NOT NULL,
-    email       VARCHAR(100) UNIQUE NOT NULL,
-    phone       VARCHAR(15),
-    password    VARCHAR(255)        NOT NULL,
-    role        ENUM('customer', 'staff', 'admin', 'driver') DEFAULT 'customer',  -- [MỚI] thêm 'driver'
-    is_active   BOOLEAN             DEFAULT TRUE,
-    created_at  TIMESTAMP           DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP           DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
--- =============================================
--- BẢNG TUYẾN XE
--- =============================================
-CREATE TABLE routes (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    origin          VARCHAR(100) NOT NULL,
-    destination     VARCHAR(100) NOT NULL,
-    distance_km     FLOAT,
-    duration_min    INT,
-    base_price      DECIMAL(10, 2) NOT NULL,
-    is_active       BOOLEAN DEFAULT TRUE,
-    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- =============================================
--- BẢNG XE
--- =============================================
-CREATE TABLE vehicles (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    license_plate   VARCHAR(20) UNIQUE NOT NULL,
-    vehicle_type    ENUM('sleeper', 'limousine', 'standard') NOT NULL,
-    total_seats     INT NOT NULL,
-    seat_layout     JSON,               -- {"floors": 2, "rows": 5, "cols": [2, 1]}
-    is_active       BOOLEAN DEFAULT TRUE,
-    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- =============================================
--- BẢNG MẪU CHUYẾN LẶP LẠI (sinh Trip tự động theo tuần)
--- =============================================
-CREATE TABLE trip_templates (
-    id                     INT AUTO_INCREMENT PRIMARY KEY,
-    route_id               INT NOT NULL,
-    vehicle_id             INT NOT NULL,
-    departure_time_of_day  VARCHAR(5) NOT NULL,   -- "HH:mm"
-    duration_minutes       INT,                    -- dùng tính arrival_time khi sinh Trip
-    price                  DECIMAL(10, 2) NOT NULL,
-    available_seats        INT NOT NULL,
-    days_of_week           JSON NOT NULL,          -- [0..6] theo Date.getDay(), 0 = Chủ nhật
-    driver_id              INT NULL,               -- [MỚI] Tài xế chính mặc định, Trip sinh ra kế thừa giá trị này
-    co_driver_id           INT NULL,               -- [MỚI] Tài xế phụ mặc định (có hoặc không)
-    is_active              BOOLEAN DEFAULT TRUE,
-    created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (route_id)   REFERENCES routes(id)   ON DELETE CASCADE,
-    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE,
-    FOREIGN KEY (driver_id)  REFERENCES users(id)    ON DELETE SET NULL
-);
-
--- =============================================
--- BẢNG CHUYẾN XE
--- =============================================
-CREATE TABLE trips (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    route_id        INT NOT NULL,
-    vehicle_id      INT NOT NULL,
-    departure_time  DATETIME NOT NULL,
-    arrival_time    DATETIME,
-    available_seats INT NOT NULL,
-    price           DECIMAL(10, 2) NOT NULL,
-    status          ENUM('scheduled', 'ongoing', 'completed', 'cancelled') DEFAULT 'scheduled',
-    template_id     INT NULL,   -- không NULL nếu Trip này do trip_templates tự sinh ra
-    driver_id       INT NULL,   -- [MỚI] Tài xế chính được phân công (users.role = 'driver')
-    co_driver_id    INT NULL,   -- [MỚI] Tài xế phụ (có hoặc không), khác tài xế chính
-    reminder_sent_at DATETIME NULL,  -- [MỚI] Thời điểm đã gửi mail nhắc khách (NULL = chưa gửi)
-    actual_departure_at DATETIME NULL,  -- [MỚI] Giờ xuất bến thực tế (tài xế bấm "Bắt đầu chạy")
-    actual_arrival_at   DATETIME NULL,  -- [MỚI] Giờ đến thực tế (tài xế bấm "Hoàn thành")
-    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (route_id)   REFERENCES routes(id)   ON DELETE CASCADE,
-    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE,
-    FOREIGN KEY (driver_id)  REFERENCES users(id)    ON DELETE SET NULL,
-    -- Xóa template chỉ gỡ liên kết (template_id -> NULL), KHÔNG xóa Trip đã sinh
-    -- (giữ nguyên vé/hóa đơn đã bán trên chuyến đó).
-    FOREIGN KEY (template_id) REFERENCES trip_templates(id) ON DELETE SET NULL
-);
-
--- =============================================
--- BẢNG HÓA ĐƠN (1 lần thanh toán)
--- =============================================
-CREATE TABLE invoices (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    user_id         INT NOT NULL,
-    total_price     DECIMAL(10, 2) NOT NULL,
-    payment_method  ENUM('cash', 'momo') DEFAULT 'cash',
-    payment_status  ENUM('pending', 'paid', 'refunded') DEFAULT 'pending',
-    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- =============================================
--- BẢNG VÉ (1 ghế = 1 vé, thuộc về 1 hóa đơn)
--- =============================================
-CREATE TABLE tickets (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    invoice_id      INT NOT NULL,
-    trip_id         INT NOT NULL,
-    seat_number     INT NOT NULL,
-    active_seat_number INT NULL,  -- = seat_number khi booking_status='booked', NULL khi 'cancelled'
-    passenger_name  VARCHAR(100)    NOT NULL,   -- Tên hành khách thực tế
-    passenger_phone VARCHAR(15)     NOT NULL,   -- SDT hành khách
-    ticket_price    DECIMAL(10, 2)  NOT NULL,
-    booking_status  ENUM('booked', 'cancelled') DEFAULT 'booked',
-    cancelled_at    TIMESTAMP NULL,
-    issued_at       DATETIME NULL,   -- [MỚI] Thời điểm in gần nhất (cache — nguồn thật là ticket_prints)
-    issued_by       INT NULL,        -- [MỚI] Nhân viên in gần nhất (users.id)
-    print_count     INT NOT NULL DEFAULT 0,  -- [MỚI] Số lần đã in (>1 nghĩa là đã in lại)
-    boarded_at      DATETIME NULL,   -- [MỚI] Thời điểm khách lên xe (tài xế điểm danh), NULL = chưa lên
-    boarded_by      INT NULL,        -- [MỚI] Người điểm danh (users.id — tài xế hoặc nhân viên)
-    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
-    FOREIGN KEY (trip_id)    REFERENCES trips(id)    ON DELETE CASCADE,
-    -- Chống double booking, chỉ tính vé đang 'booked': MySQL cho phép nhiều NULL
-    -- trong UNIQUE KEY nên vé đã hủy (active_seat_number=NULL) không chặn bán lại ghế.
-    UNIQUE KEY uq_trip_active_seat (trip_id, active_seat_number)
-);
-
--- =============================================
--- BẢNG LỊCH SỬ IN VÉ (mọi lần in, phục vụ đối soát cuối ca) [MỚI]
--- =============================================
-CREATE TABLE ticket_prints (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    ticket_id       INT NOT NULL,
-    invoice_id      INT NOT NULL,        -- Denormalize từ ticket.invoice_id, tránh join thêm khi lọc báo cáo
-    printed_by      INT NOT NULL,        -- Nhân viên thực hiện in (users.id)
-    printed_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    print_type      ENUM('original', 'reprint') NOT NULL,
-    print_sequence  INT NOT NULL,        -- 1, 2, 3... = "in lại lần N"
-    reason          VARCHAR(255) NULL,   -- Bắt buộc (ở tầng controller) khi print_type = 'reprint'
-    FOREIGN KEY (ticket_id)  REFERENCES tickets(id) ON DELETE CASCADE,
-    FOREIGN KEY (printed_by) REFERENCES users(id)   ON DELETE CASCADE
-);
-
--- =============================================
--- BẢNG SỰ CỐ / TRỄ CHUYẾN (tài xế báo) [MỚI]
--- =============================================
-CREATE TABLE trip_incidents (
-    id                     INT AUTO_INCREMENT PRIMARY KEY,
-    trip_id                INT NOT NULL,
-    reported_by            INT NOT NULL,        -- Tài xế báo (users.id)
-    type                   ENUM('delay', 'breakdown', 'accident', 'other') NOT NULL,
-    delay_minutes          INT NULL,            -- Bắt buộc (ở tầng controller) khi type = 'delay'
-    note                   VARCHAR(500) NULL,
-    passengers_notified_at DATETIME NULL,       -- Đã gửi mail báo khách (NULL = chưa/không gửi)
-    resolved_at            DATETIME NULL,       -- Staff/Admin đánh dấu đã xử lý
-    resolved_by            INT NULL,
-    created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (trip_id)     REFERENCES trips(id) ON DELETE CASCADE,
-    FOREIGN KEY (reported_by) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
-);
-
--- =============================================
--- BẢNG NGÀY NGHỈ CỦA TÀI XẾ [MỚI]
--- =============================================
-CREATE TABLE driver_unavailabilities (
-    id          INT AUTO_INCREMENT PRIMARY KEY,
-    driver_id   INT NOT NULL,
-    start_date  DATE NOT NULL,
-    end_date    DATE NOT NULL,          -- >= start_date, tính cả ngày cuối
-    reason      VARCHAR(255) NULL,
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (driver_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- =============================================
--- INDEX GỢI Ý (TỐI ƯU QUERY)
--- =============================================
-CREATE INDEX idx_trips_route        ON trips(route_id);
-CREATE INDEX idx_trips_departure    ON trips(departure_time);
-CREATE INDEX idx_trips_driver       ON trips(driver_id, departure_time);  -- [MỚI] Lịch chạy của tài xế
-CREATE INDEX idx_tickets_invoice    ON tickets(invoice_id);
-CREATE INDEX idx_tickets_trip       ON tickets(trip_id);
-CREATE INDEX idx_invoices_user      ON invoices(user_id);
-CREATE INDEX idx_ticket_prints_ticket        ON ticket_prints(ticket_id);
-CREATE INDEX idx_ticket_prints_printed_at    ON ticket_prints(printed_at);
-CREATE INDEX idx_ticket_prints_printed_by_at ON ticket_prints(printed_by, printed_at);
-CREATE INDEX idx_trip_incidents_trip         ON trip_incidents(trip_id);              -- [MỚI]
-CREATE INDEX idx_trip_incidents_open         ON trip_incidents(resolved_at, created_at); -- [MỚI] Lọc sự cố chưa xử lý
-CREATE INDEX idx_driver_unavail              ON driver_unavailabilities(driver_id, start_date, end_date); -- [MỚI]
-```
+**Sao lưu / khôi phục:** `npm run db:backup` (ra `backend/backups/*.sql.gz`, giữ 10 bản) · `npm run db:restore -- <file> --yes`.
+**Không** chép thư mục `C:\xampp\mysql\backup` đè lên `data` khi XAMPP báo *MySQL shutdown unexpectedly* — đó là cách đã làm mất dữ liệu (xem mục 1 của tài liệu thiết kế).
 
 ---
 
@@ -411,10 +225,15 @@ npm install --save-dev nodemon
 |------|-------|
 | `npm run dev` | `nodemon server.js` — chạy dev server (mặc định port `8080`) |
 | `npm start` | `node server.js` — chạy production |
-| `npm run db:sync` | Đồng bộ Sequelize models → MySQL (`src/scripts/syncDb.js`) |
-| `npm run db:add-driver` | [MỚI] Migration bổ sung cột/bảng cho tính năng tài xế vào DB **đang có dữ liệu** (idempotent, không xóa gì) — chạy một lần sau khi pull code này |
+| `npm run db:create` | [MỚI] Tạo database `DB_NAME` (utf8mb4) nếu chưa có |
+| `npm run db:migrate` | [MỚI] Chạy các migration chưa chạy (`backend/migrations/`) |
+| `npm run db:migrate:undo -- --yes` | [MỚI] Lùi 1 migration (tự sao lưu trước) |
+| `npm run db:status` | [MỚI] Xem migration đã chạy / đang chờ |
+| `npm run db:reset -- --yes` | [MỚI] Sao lưu → xóa mọi bảng → migrate → seed. Chỉ chạy với DB tên `*_dev`/`*_test` |
+| `npm run db:backup` | [MỚI] `mysqldump` ra `backups/<DB>-<thời gian>.sql.gz`, giữ `BACKUP_KEEP` bản |
+| `npm run db:restore -- <file> --yes` | [MỚI] Khôi phục từ file sao lưu (sao lưu trạng thái hiện tại trước) |
 | `npm run db:seed-drivers` | [MỚI] Tạo sẵn **2 tài xế/xe** (thay ca chiều đi – chiều về) cho mọi xe đang có mẫu chuyến, gán vào mẫu chuyến và các chuyến `scheduled` sắp tới còn trống tài xế. Không xóa dữ liệu, chạy lại không tạo trùng, không gửi mail. Đăng nhập: `taixe1.<biển số viết liền>@datvexekhach.vn` / `password` (VD `taixe1.51b11111@...`) |
-| `npm run db:seed` | Seed dữ liệu mẫu (`src/scripts/seedData.js`) — **xóa dữ liệu cũ**. Tạo admin/staff/5 khách, 22 xe, 36 mẫu chuyến, 44 tài xế (2/xe), 21 ngày lịch sử chạy có giờ thực tế + vé + điểm danh, chuyến 14 ngày tới (vé cho 3 ngày đầu), lịch nghỉ tài xế, sự cố đã/chưa xử lý, hóa đơn pending/hủy lẻ/hoàn tiền. Tài khoản demo in ra cuối lệnh (mật khẩu `password`), VD tài xế `taixe1.51b11111@datvexekhach.vn` |
+| `npm run db:seed -- --yes` | Seed dữ liệu mẫu (`src/scripts/seedData.js`) — **xóa dữ liệu cũ**, chỉ chạy với DB `*_dev`/`*_test` đã migrate. Tạo admin/staff/5 khách, 22 xe, 36 mẫu chuyến, 44 tài xế (2/xe), 21 ngày lịch sử chạy có giờ thực tế + vé + điểm danh, chuyến 14 ngày tới (vé cho 3 ngày đầu), lịch nghỉ tài xế, sự cố đã/chưa xử lý, hóa đơn pending/hủy lẻ/hoàn tiền. Tài khoản demo in ra cuối lệnh (mật khẩu `password`), VD tài xế `taixe1.51b11111@datvexekhach.vn` |
 
 ### `.env`
 
@@ -422,9 +241,14 @@ npm install --save-dev nodemon
 PORT=8080
 DB_HOST=localhost
 DB_PORT=3306
-DB_NAME=bus_ticket_db
+DB_NAME=bus_ticket_dev   # phải kết thúc bằng _dev/_test để dùng db:seed/db:reset/db:restore
 DB_USER=root
 DB_PASS=yourpassword
+# Sao lưu / khôi phục (XAMPP) — đổi khi chuyển sang Docker
+MYSQLDUMP_PATH=C:\xampp\mysql\bin\mysqldump.exe
+MYSQL_PATH=C:\xampp\mysql\bin\mysql.exe
+BACKUP_DIR=backups
+BACKUP_KEEP=10
 JWT_SECRET=your_jwt_secret_key
 JWT_EXPIRES_IN=7d
 CLIENT_URL=http://localhost:5173
@@ -465,6 +289,13 @@ MAIL_SKIP_DOMAINS=datvexekhach.vn,khachhang.vn
 # Gửi trước giờ khởi hành bao nhiêu phút (mặc định: 30) và chu kỳ quét tính bằng ms (mặc định: 1 phút)
 DEPARTURE_REMINDER_MINUTES=30
 DEPARTURE_REMINDER_CHECK_INTERVAL_MS=60000
+
+# [MỚI] Xe trung chuyển (md/DonKhachTrungChuyen.md): chốt danh sách đón trước giờ chạy bao nhiêu phút
+# (mặc định 120), giờ đón dự kiến ghi trong mail = giờ chạy - số phút này (mặc định 60),
+# chu kỳ job chốt danh sách tính bằng ms (mặc định 1 phút). Nên: CUTOFF > PICKUP_LEAD > DEPARTURE_REMINDER.
+SHUTTLE_CUTOFF_MINUTES=120
+SHUTTLE_PICKUP_LEAD_MINUTES=60
+SHUTTLE_CHECK_INTERVAL_MS=60000
 
 # [MỚI] Chuyến đã phân công tài xế mà tài xế quên bấm "Hoàn thành": job updateTripStatuses tự
 # chuyển 'completed' sau arrival_time + số phút này (mặc định: 180)
@@ -511,6 +342,10 @@ TRIP_AUTO_COMPLETE_GRACE_MINUTES=180
 | POST | `/api/tickets/:id/print` | [MỚI] In vé (chỉ khi hóa đơn đã `paid`); in lại (`print_count > 0`) bắt buộc `reason` | Staff/Admin |
 | GET | `/api/tickets/:id/prints` | [MỚI] Lịch sử in của một vé | Staff/Admin |
 | PUT | `/api/tickets/:id/board` | [MỚI] Điểm danh khách lên xe — body `{ boarded: true \| false }` (bỏ tick được để sửa nhầm). Chỉ vé `booked`, chuyến `scheduled`/`ongoing`; tài xế chỉ điểm danh được vé thuộc chuyến của mình (403 nếu không) | Driver/Staff/Admin |
+| PUT | `/api/tickets/:id/pickup` | [MỚI] Đổi cách lên xe `{ pickup_type: 'station' \| 'shuttle', pickup_address?, pickup_note? }`. Khách chỉ đổi vé của mình và trước mốc chốt; staff/admin đổi bất kỳ lúc nào trước giờ chạy | Customer/Staff/Admin |
+| GET | `/api/shuttles/queue` | [MỚI] Hàng chờ "Cần in danh sách đón" (`from`/`to`) — chuyến đã chốt chưa in / cần in lại / bị hủy sau khi in | Staff/Admin |
+| GET | `/api/shuttles/pickup-list` | [MỚI] Dữ liệu tờ in danh sách đón (`trip_ids=1,2` hoặc `from`/`to`), chỉ vé `booked` của hóa đơn `paid`, gộp theo địa chỉ | Staff/Admin |
+| POST | `/api/shuttles/mark-printed` | [MỚI] Ghi nhận đã in `{ trip_ids }` (cũng dùng để bấm "Đã xử lý" cho chuyến bị hủy sau khi in) | Staff/Admin |
 | GET | `/api/tickets/prints` | [MỚI] Báo cáo đối soát in vé theo `from`/`to`/`printed_by` — nhân viên chỉ xem được của chính mình (backend ép `printed_by`, bỏ qua tham số client gửi), admin xem được toàn bộ | Staff/Admin |
 
 #### 👤 Customer Lookup — Đặt vé hộ khách [MỚI]
@@ -545,7 +380,7 @@ TRIP_AUTO_COMPLETE_GRACE_MINUTES=180
 |--------|----------|-------|------|
 | GET | `/api/routes` | Danh sách tuyến xe | Staff/Admin |
 | GET | `/api/routes/:id` | [MỚI] Chi tiết tuyến xe (dùng cho Form sửa) | Staff/Admin |
-| POST | `/api/routes` | Thêm tuyến xe. Nhận thêm `create_return` [MỚI] (mặc định `true`) — tạo luôn tuyến chiều về B→A (cùng `distance_km`/`duration_min`/`base_price`) trong cùng transaction, bỏ qua nếu B→A đã tồn tại; trả về `{ route, returnRoute }` (`returnRoute = null` nếu không tạo) | Admin |
+| POST | `/api/routes` | Thêm tuyến xe (nhận thêm `origin_station`, `shuttle_enabled`, `shuttle_area_note` [MỚI]; `PUT` cũng vậy). Nhận thêm `create_return` [MỚI] (mặc định `true`) — tạo luôn tuyến chiều về B→A (cùng `distance_km`/`duration_min`/`base_price`) trong cùng transaction, bỏ qua nếu B→A đã tồn tại; trả về `{ route, returnRoute }` (`returnRoute = null` nếu không tạo) | Admin |
 | PUT | `/api/routes/:id` | Sửa tuyến xe | Admin |
 | DELETE | `/api/routes/:id` | Xóa tuyến xe | Admin |
 
@@ -763,9 +598,13 @@ VITE_API_URL=http://localhost:8080/api
 ## 🚀 Chạy Dự Án
 
 ```bash
+# Lần đầu (hoặc sau khi pull có migration mới)
+cd backend
+npm run db:migrate
+
 # Backend
 cd backend
-npm run dev       # nodemon server.js
+npm run dev       # nodemon server.js (cảnh báo nếu còn migration chưa chạy)
 
 # Frontend
 cd frontend
@@ -848,6 +687,7 @@ npm run dev       # Vite dev server
 - **Ngày nghỉ của tài xế [MỚI]:** Tài xế đăng ký khoảng ngày nghỉ ở `/driver/leave` (`Unavailability.jsx`); 409 nếu đã có chuyến được phân công trong khoảng đó (phải nhờ Admin gỡ phân công trước). Admin chọn tài xế cho Trip/TripTemplate: tài xế đang nghỉ ngày đó bị disable trong Select, backend chặn thêm một lớp (400). Job `generateTripsFromTemplates.js` gặp ngày tài xế mặc định của template đang nghỉ thì **vẫn sinh chuyến** nhưng để `driver_id = NULL` (đếm vào `skippedDriverUnavailable` — gồm cả tài xế nghỉ, bị khóa hoặc trùng lịch) để Admin phân công người khác — không bỏ chuyến của khách.
 - **Tài xế phụ [MỚI]:** Mỗi chuyến/mẫu chuyến có thể có thêm **tài xế phụ** (`co_driver_id`, có hoặc không, phải khác tài xế chính và chỉ chọn được khi đã có tài xế chính). Khi lập chuyến (`ManageTrips.jsx`) có 2 ô "Tài xế chính" / "Tài xế phụ" dùng chung component `DriverSelect.jsx`: đều chia nhóm **Trống lịch** / **Không khả dụng** theo giờ đi–đến đang nhập; tài xế chính tự điền tài xế quen của xe, tài xế phụ để trống cho admin tự chọn. Một tài xế làm phụ ở chuyến nào thì cũng tính là bận khung giờ đó. Tài xế phụ đăng nhập thấy chuyến trong lịch tuần (nhãn "Tài xế phụ"), xem danh sách khách, điểm danh và báo sự cố được, nhưng **chỉ tài xế chính** bấm "Bắt đầu chạy"/"Hoàn thành". Mọi nơi hiển thị tài xế (danh sách chuyến, trang xe, danh sách khách/phiếu in, kết quả tìm chuyến, vé của khách) đều hiện thêm tài xế phụ.
 - **Tài xế có sẵn & đề xuất khi lập lịch [MỚI]:** `npm run db:seed-drivers` tạo 2 tài xế cho mỗi xe: tài xế 1 làm **tài xế chính**, tài xế 2 làm **tài xế phụ** trên mọi chuyến của xe (hai người đi theo xe nên lịch không chồng giờ), rồi gán vào các chuyến sắp chạy đang trống. Khi admin tạo chuyến (`ManageTrips.jsx`), ô "Tài xế phụ trách" tự gọi `GET /api/users/drivers` theo xe + giờ đi/đến đang nhập, chia nhóm **Trống lịch** (★ tài xế của xe đứng đầu) / **Không khả dụng** (ghi rõ "đang nghỉ" hoặc "trùng TRIP-x") và tự điền tài xế phù hợp nhất (admin chọn tay thì không bị ghi đè). Form mẫu chuyến tự điền tài xế quen khi chọn xe. Trang xe (`ViewVehicles.jsx`/`ManageVehicles.jsx`, component `VehicleDriverCell.jsx`) hiện tài xế của chuyến đang/sắp chạy + đội thay ca; danh sách khách và phiếu điểm danh in hiện tên + SĐT tài xế. Admin tạo thẳng tài khoản tài xế/nhân viên bằng nút "Thêm tài khoản" ở Quản lý người dùng.
+- **Xe trung chuyển [MỚI]:** khách chọn khi đặt vé (từng vé) "Tự đến bến" hoặc "Xe trung chuyển đón" + địa chỉ, ở tuyến có `shuttle_enabled` và trước mốc chốt `SHUTTLE_CUTOFF_MINUTES` (mặc định 120 phút). Job `lockShuttleLists.js` (luôn chạy, không cần SMTP) khóa danh sách ở mốc chốt và gửi mail báo khách đi trung chuyển; quầy vé in danh sách tại `/staff/shuttles` (hoặc nút "In danh sách đón" trong dialog danh sách khách) đưa cho tài xế trung chuyển. Chỉ vé của hóa đơn đã thanh toán vào danh sách; hóa đơn `pending` có vé trung chuyển bị tự hủy khi chuyến qua mốc chốt. Chi tiết: `md/DonKhachTrungChuyen.md`. Cột/bảng nằm trong migration baseline.
 - **Email nhắc chuyến [MỚI]:** Job nền `sendDepartureReminders.js` chạy mỗi `DEPARTURE_REMINDER_CHECK_INTERVAL_MS` (mặc định 1 phút), tìm các chuyến `scheduled` sẽ khởi hành trong vòng `DEPARTURE_REMINDER_MINUTES` (mặc định **30 phút**) và có `reminder_sent_at IS NULL`, gửi **1 email / hóa đơn** tới chủ hóa đơn có vé `booked` (liệt kê số ghế, tên hành khách, tuyến, giờ khởi hành, biển số xe) qua `mailService.js` (Nodemailer), rồi set `reminder_sent_at`. Bỏ qua email placeholder `khach.<sđt>@quayve.local` của khách tạo tại quầy. Lỗi SMTP chỉ được log, không làm dừng job; thiếu cấu hình SMTP thì job tự tắt khi khởi động server.
 - **Tự tạo tuyến chiều về [MỚI]:** Form "Thêm tuyến" ở `ManageRoutes.jsx` có checkbox "Tự tạo tuyến chiều về" (**mặc định bật**). Khi bật, `POST /api/routes` tạo thêm tuyến B→A với cùng `distance_km`/`duration_min`/`base_price` trong cùng một transaction; nếu tuyến B→A đã tồn tại thì bỏ qua (không tạo trùng). Chỉ áp dụng khi **tạo mới** — sửa/vô hiệu hóa một tuyến **không** tự đồng bộ sang tuyến chiều ngược lại.
 - **shadcn/ui components đã cài (`frontend/src/components/ui/`):**

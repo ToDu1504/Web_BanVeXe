@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useForm, useFieldArray } from 'react-hook-form'
+import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod'
 import { useBooking } from '@/hooks/useBooking'
@@ -13,14 +13,31 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FormField } from '@/components/ui/form-field'
-import { Bus, CreditCard, Banknote, ArrowRight, Loader2, UserSearch, Check, X } from 'lucide-react'
+import PickupSelector from '@/components/features/PickupSelector'
+import { getShuttleAvailability, isPastShuttleCutoff } from '@/lib/shuttle'
+import { Bus, CreditCard, Banknote, ArrowRight, Loader2, UserSearch, Check, X, TriangleAlert } from 'lucide-react'
 import { formatCurrency, formatDateTime, formatDuration } from '@/lib/utils'
 import { toast } from 'sonner'
 import { staggerContainer, fadeInUp } from '@/lib/motionVariants'
 
+const DEFAULT_PICKUP = { type: 'station', address: '', note: '' }
+
 const passengerSchema = zod.object({
   fullName: zod.string().min(2, 'Họ tên hành khách phải có ít nhất 2 ký tự'),
   phone: zod.string().regex(/^(0[3|5|7|8|9])+([0-9]{8})$/, 'Số điện thoại không hợp lệ'),
+  pickup: zod.object({
+    type: zod.enum(['station', 'shuttle']),
+    address: zod.string(),
+    note: zod.string(),
+  }),
+}).superRefine((passenger, ctx) => {
+  if (passenger.pickup.type === 'shuttle' && passenger.pickup.address.trim().length < 5) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['pickup', 'address'],
+      message: 'Vui lòng nhập địa chỉ đón (ít nhất 5 ký tự)',
+    })
+  }
 })
 
 const bookingFormSchema = zod.object({
@@ -109,6 +126,7 @@ export default function BookTicket() {
     handleSubmit,
     getValues,
     setValue,
+    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(bookingFormSchema),
@@ -118,6 +136,7 @@ export default function BookTicket() {
       passengers: selectedSeats.map(s => ({
         fullName: s.passengerName || (isStaffBooking ? '' : user?.full_name) || '',
         phone: s.passengerPhone || (isStaffBooking ? '' : user?.phone) || '',
+        pickup: { ...DEFAULT_PICKUP },
       })),
       paymentMethod: 'momo',
     },
@@ -149,11 +168,30 @@ export default function BookTicket() {
     name: 'passengers',
   })
 
+  // Xe trung chuyển: "áp dụng cho tất cả" sao chép lựa chọn của hành khách đầu tiên.
+  const [applyPickupToAll, setApplyPickupToAll] = useState(false)
+  const copyPickupToOthers = (pickup) => {
+    ;(getValues('passengers') || []).forEach((_, i) => {
+      if (i > 0) setValue(`passengers.${i}.pickup`, { ...pickup }, { shouldValidate: true })
+    })
+  }
+  const watchedPassengers = watch('passengers')
+  const watchedPayment = watch('paymentMethod')
+
   if (!selectedTrip || selectedSeats.length === 0) {
     return null
   }
 
   const totalPrice = selectedSeats.length * selectedTrip.price
+
+  const shuttleAvailability = getShuttleAvailability(selectedTrip, selectedTrip.Route, { privileged: isStaffBooking })
+  const hasShuttle = (watchedPassengers || []).some((p) => p?.pickup?.type === 'shuttle')
+  const cutoffMinutes = selectedTrip.shuttle_cutoff_minutes ?? 120
+  const payByTime = new Date(new Date(selectedTrip.departure_time).getTime() - cutoffMinutes * 60 * 1000)
+
+  // Trang hóa đơn sau khi đặt: khách về lịch sử của mình; nhân viên/admin đặt hộ
+  // về trang quản lý hóa đơn (/customer/invoices chỉ dành cho role customer).
+  const invoicesPath = isStaffBooking ? '/staff/invoices' : '/customer/invoices'
 
   const onSubmit = async (data) => {
     if (isStaffBooking && !selectedCustomer) {
@@ -170,6 +208,13 @@ export default function BookTicket() {
         passenger_name: data.passengers[index].fullName,
         passenger_phone: data.passengers[index].phone,
         ticket_price: selectedTrip.price,
+        pickup_type: data.passengers[index].pickup.type,
+        ...(data.passengers[index].pickup.type === 'shuttle'
+          ? {
+              pickup_address: data.passengers[index].pickup.address.trim(),
+              pickup_note: data.passengers[index].pickup.note.trim() || undefined,
+            }
+          : {}),
       }))
 
       const result = await invoiceApi.create({
@@ -194,14 +239,14 @@ export default function BookTicket() {
         } catch (momoError) {
           toast.error(momoError.response?.data?.message || 'Không thể khởi tạo thanh toán MoMo. Vui lòng thử lại từ lịch sử hóa đơn.')
           resetBooking()
-          navigate('/customer/invoices')
+          navigate(invoicesPath)
           return
         }
       }
 
       toast.success('Đặt vé thành công! Vui lòng thanh toán hóa đơn.')
       resetBooking() // Clear booking state
-      navigate('/customer/invoices')
+      navigate(invoicesPath)
     } catch (error) {
       const errMsg = error.response?.data?.message || 'Có lỗi xảy ra khi đặt vé xe'
       toast.error(errMsg)
@@ -364,8 +409,41 @@ export default function BookTicket() {
                           />
                         </FormField>
                       </div>
+
+                      <Controller
+                        control={control}
+                        name={`passengers.${index}.pickup`}
+                        render={({ field: pickupField }) => (
+                          <PickupSelector
+                            idPrefix={`passenger-${index}`}
+                            value={pickupField.value}
+                            onChange={(next) => {
+                              pickupField.onChange(next)
+                              if (applyPickupToAll && index === 0) copyPickupToOthers(next)
+                            }}
+                            route={selectedTrip.Route}
+                            availability={shuttleAvailability}
+                            error={errors.passengers?.[index]?.pickup?.address?.message}
+                          />
+                        )}
+                      />
                     </motion.div>
                   ))}
+
+                  {fields.length > 1 && shuttleAvailability.available && (
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={applyPickupToAll}
+                        onChange={(e) => {
+                          setApplyPickupToAll(e.target.checked)
+                          if (e.target.checked) copyPickupToOthers(getValues('passengers.0.pickup'))
+                        }}
+                        className="accent-[hsl(var(--primary))]"
+                      />
+                      Áp dụng cách lên xe của hành khách đầu tiên cho tất cả hành khách
+                    </label>
+                  )}
                 </motion.div>
               </CardContent>
             </Card>
@@ -410,6 +488,17 @@ export default function BookTicket() {
                     </div>
                   </label>
                 </div>
+
+                {hasShuttle && watchedPayment === 'cash' && (
+                  <div className="flex gap-2 p-3 rounded-lg border border-[hsl(var(--warning))] bg-[hsl(var(--warning)/0.08)] text-xs">
+                    <TriangleAlert className="h-4 w-4 shrink-0 text-[hsl(var(--warning))]" />
+                    <p>
+                      {isStaffBooking && isPastShuttleCutoff(selectedTrip)
+                        ? 'Chuyến đã qua mốc chốt danh sách đón: hãy chuyển hóa đơn sang "Đã thanh toán" ngay sau khi đặt, nếu không hóa đơn sẽ bị tự hủy.'
+                        : `Vé đi xe trung chuyển cần được thanh toán trước ${formatDateTime(payByTime)}, nếu không hóa đơn sẽ tự hủy khi chốt danh sách đón.`}
+                    </p>
+                  </div>
+                )}
               </CardContent>
               <CardFooter className="bg-[hsl(var(--muted)/0.4)] p-6 border-t border-[hsl(var(--border))] rounded-b-xl flex justify-between items-center">
                 <div className="flex flex-col">

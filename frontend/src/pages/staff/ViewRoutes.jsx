@@ -95,6 +95,7 @@ export default function ViewRoutes() {
                   <TableHead>Khoảng cách (km)</TableHead>
                   <TableHead>Thời gian dự kiến</TableHead>
                   <TableHead>Giá vé cơ bản</TableHead>
+                  <TableHead>Bến / trung chuyển</TableHead>
                   <TableHead>Trạng thái</TableHead>
                 </TableRow>
               </TableHeader>
@@ -111,6 +112,14 @@ export default function ViewRoutes() {
                     <TableCell className="text-xs">{formatDuration(route.duration_min)}</TableCell>
                     <TableCell className="font-bold text-[hsl(var(--primary))] text-xs">
                       {formatCurrency(route.base_price)}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      <p>{route.origin_station || '—'}</p>
+                      {route.shuttle_enabled && (
+                        <p className="text-[hsl(var(--primary))]">
+                          🚐 Có trung chuyển{route.shuttle_area_note ? `: ${route.shuttle_area_note}` : ''}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell>
                       <ActiveStatus isActive={route.is_active} />

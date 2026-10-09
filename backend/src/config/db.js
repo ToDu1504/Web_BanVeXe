@@ -2,7 +2,7 @@ const { Sequelize } = require('sequelize')
 require('dotenv').config()
 
 const sequelize = new Sequelize(
-  process.env.DB_NAME || 'bus_ticket_db',
+  process.env.DB_NAME || 'bus_ticket_dev',
   process.env.DB_USER || 'root',
   process.env.DB_PASS ?? '',
   {
@@ -15,6 +15,8 @@ const sequelize = new Sequelize(
       underscored: true, // Use snake_case for db columns (created_at, updated_at)
       createdAt: 'created_at',
       updatedAt: 'updated_at',
+      charset: 'utf8mb4',
+      collate: 'utf8mb4_unicode_ci',
     },
     timezone: '+07:00', // Set to Vietnam timezone
     dialectOptions: {

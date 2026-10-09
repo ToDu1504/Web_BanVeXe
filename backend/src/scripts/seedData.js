@@ -17,6 +17,8 @@ const {
   generateTripsFromTemplates,
 } = require("../jobs/generateTripsFromTemplates");
 const { seedDrivers } = require("./seedDrivers");
+const { migrator } = require("../db/migrator");
+const { assertDestructiveAllowed } = require("../db/safety");
 
 /**
  * ============================================================================
@@ -272,6 +274,19 @@ const seedData = async () => {
       },
     ]);
 
+    // Bến xuất phát + xe trung chuyển: tuyến có index chẵn bật trung chuyển (md/DonKhachTrungChuyen.md).
+    for (const [index, route] of routes.entries()) {
+      await route.update({
+        origin_station: `Bến xe ${route.origin} — văn phòng nhà xe, ${route.origin}`,
+        shuttle_enabled: index % 2 === 0,
+        shuttle_area_note: index % 2 === 0 ? `Nội thành ${route.origin} (bán kính ~15 km)` : null,
+      });
+    }
+    const shuttleRouteIds = new Set(routes.filter((r) => r.shuttle_enabled).map((r) => r.id));
+    const SHUTTLE_ADDRESSES = [
+      "12 Nguyễn Huệ, Quận 1", "45 Lê Văn Sỹ, Quận 3", "88 Cách Mạng Tháng 8, Quận 10",
+      "230 Điện Biên Phủ, Bình Thạnh", "17 Phan Xích Long, Phú Nhuận", "5 Hoàng Văn Thụ, Tân Bình",
+    ];
     console.log(`   - Đã nạp ${routes.length} tuyến đường vận chuyển.`);
 
     // 4. Create Vehicles
@@ -750,6 +765,7 @@ const seedData = async () => {
       const vehicle = vehicleById.get(trip.vehicle_id);
       const seatCount = Math.min(randInt(min, max), vehicle.total_seats);
       if (seatCount === 0) return;
+      let shuttleTicketCount = 0;
       const seatPool = Array.from({ length: vehicle.total_seats }, (_, i) => i + 1);
       const seats = [];
       for (let i = 0; i < seatCount; i++) {
@@ -764,6 +780,7 @@ const seedData = async () => {
           total_price: groupSeats.length * Number(trip.price),
           payment_method: rand() < 0.5 ? "momo" : "cash",
           payment_status: "paid",
+          paid_at: createdAt,
           created_at: createdAt,
           updated_at: createdAt,
         });
@@ -774,7 +791,13 @@ const seedData = async () => {
         await Ticket.bulkCreate(
           groupSeats.map((seat) => {
             const boarded = boardedAt && rand() < boardRate;
+            const useShuttle = shuttleRouteIds.has(trip.route_id) && rand() < 0.2;
+            if (useShuttle) shuttleTicketCount++;
             return {
+              pickup_type: useShuttle ? "shuttle" : "station",
+              pickup_address: useShuttle ? pick(SHUTTLE_ADDRESSES) : null,
+              pickup_note: useShuttle && rand() < 0.3 ? "Gọi trước khi tới" : null,
+              pickup_updated_at: useShuttle ? createdAt : null,
               invoice_id: invoice.id,
               trip_id: trip.id,
               seat_number: seat,
@@ -791,6 +814,16 @@ const seedData = async () => {
         ticketCount += groupSeats.length;
       }
       await trip.update({ available_seats: vehicle.total_seats - seatCount });
+      // Chuyến đã qua mốc chốt thì khóa danh sách đón; chuyến quá khứ coi như đã in.
+      const departureMs = new Date(trip.departure_time).getTime();
+      if (departureMs - minutes(Number(process.env.SHUTTLE_CUTOFF_MINUTES) || 120) <= Date.now()) {
+        await trip.update({
+          shuttle_locked_at: new Date(departureMs - minutes(Number(process.env.SHUTTLE_CUTOFF_MINUTES) || 120)),
+          shuttle_list_printed_at: shuttleTicketCount > 0 && departureMs < Date.now()
+            ? new Date(departureMs - minutes(100))
+            : null,
+        });
+      }
     };
 
     for (const trip of createdPastTrips) {
@@ -906,6 +939,7 @@ const seedData = async () => {
         total_price: totalPrice,
         payment_method: booking.payment_method,
         payment_status: booking.payment_status,
+        paid_at: booking.payment_status === "pending" ? null : booking.created_at,
         created_at: booking.created_at,
         updated_at: booking.created_at,
       });
@@ -935,6 +969,97 @@ const seedData = async () => {
     console.log(
       `   - Đã nạp ${sampleBookings.length} hóa đơn tình huống đặc biệt (pending/hủy lẻ/hoàn tiền/đặt hộ).`,
     );
+
+    // 9b. Kịch bản xe trung chuyển (md/DonKhachTrungChuyen.md) trên 3 chuyến sắp chạy
+    //     gần nhất của các tuyến bật trung chuyển — để demo đủ các trạng thái ở
+    //     /staff/shuttles mà không phụ thuộc giờ chạy seed:
+    //       A. đã chốt + đã in, rồi CÓ THAY ĐỔI sau khi in (đổi điểm đón, hủy vé) -> "Cần in lại"
+    //       B. đã chốt, CHƯA in, 3 khách / 2 địa chỉ (có 2 khách cùng địa chỉ để thấy gộp nhóm)
+    //          + 1 vé trung chuyển CHƯA thanh toán (không được lên danh sách in)
+    //       C. chưa chốt (còn hạn đăng ký): hóa đơn tiền mặt pending có vé trung chuyển + 1 vé đã thanh toán
+    //     (trạng thái chốt/in ở đây là dữ liệu minh họa, độc lập với đồng hồ thật.)
+    const shuttleDemoTrips = await Trip.findAll({
+      where: {
+        status: "scheduled",
+        route_id: { [Op.in]: [...shuttleRouteIds] },
+        departure_time: { [Op.gt]: new Date() },
+      },
+      order: [["departure_time", "ASC"]],
+      limit: 3,
+    });
+    const nowMs = Date.now();
+    const createShuttleBooking = async (trip, { seatCount, status, method, addresses, note, paidMinutesAgo = 60 }) => {
+      const vehicle = vehicleById.get(trip.vehicle_id);
+      const taken = new Set((await Ticket.findAll({ where: { trip_id: trip.id, booking_status: "booked" }, attributes: ["seat_number"] })).map((t) => t.seat_number));
+      const seats = [];
+      for (let n = 1; n <= vehicle.total_seats && seats.length < seatCount; n++) if (!taken.has(n)) seats.push(n);
+      if (seats.length < seatCount) return [];
+      const createdAt = new Date(nowMs - minutes(paidMinutesAgo));
+      const invoice = await Invoice.create({
+        user_id: pick(customers).id,
+        total_price: seats.length * Number(trip.price),
+        payment_method: method,
+        payment_status: status,
+        paid_at: status === "pending" ? null : createdAt,
+        created_at: createdAt,
+        updated_at: createdAt,
+      });
+      const created = [];
+      for (const [i, seat] of seats.entries()) {
+        created.push(await Ticket.create({
+          invoice_id: invoice.id,
+          trip_id: trip.id,
+          seat_number: seat,
+          active_seat_number: seat,
+          ...randomPassenger(),
+          ticket_price: trip.price,
+          booking_status: "booked",
+          pickup_type: "shuttle",
+          pickup_address: addresses[i % addresses.length],
+          pickup_note: i === 0 ? note : null,
+          pickup_updated_at: createdAt,
+          created_at: createdAt,
+        }));
+      }
+      const bookedCount = await Ticket.count({ where: { trip_id: trip.id, booking_status: "booked" } });
+      await trip.update({ available_seats: vehicle.total_seats - bookedCount });
+      return created;
+    };
+
+    if (shuttleDemoTrips.length === 3) {
+      const [tripA, tripB, tripC] = shuttleDemoTrips;
+
+      // A: đã in cách đây 30 phút, sau đó 1 khách đổi điểm đón và 1 khách hủy vé.
+      const ticketsA = await createShuttleBooking(tripA, {
+        seatCount: 3, status: "paid", method: "momo", addresses: [SHUTTLE_ADDRESSES[0], SHUTTLE_ADDRESSES[1], SHUTTLE_ADDRESSES[2]], note: "Gọi trước 10 phút", paidMinutesAgo: 240,
+      });
+      await tripA.update({ shuttle_locked_at: new Date(nowMs - minutes(60)), shuttle_list_printed_at: new Date(nowMs - minutes(30)) });
+      if (ticketsA.length === 3) {
+        await ticketsA[0].update({ pickup_address: "99 Hai Bà Trưng, Quận 1", pickup_updated_at: new Date(nowMs - minutes(10)) });
+        await ticketsA[2].update({ booking_status: "cancelled", active_seat_number: null, cancelled_at: new Date(nowMs - minutes(5)) });
+        await tripA.increment("available_seats", { by: 1 });
+      }
+
+      // B: đã chốt, chưa in; 2 khách chung địa chỉ; thêm 1 hóa đơn pending (không lên danh sách).
+      await tripB.update({ shuttle_locked_at: new Date(nowMs - minutes(20)) });
+      await createShuttleBooking(tripB, {
+        seatCount: 3, status: "paid", method: "cash", addresses: [SHUTTLE_ADDRESSES[3], SHUTTLE_ADDRESSES[3], SHUTTLE_ADDRESSES[4]], note: "Cổng xanh, hẻm 12", paidMinutesAgo: 180,
+      });
+      await createShuttleBooking(tripB, {
+        seatCount: 1, status: "pending", method: "cash", addresses: [SHUTTLE_ADDRESSES[5]], note: "Chưa thanh toán", paidMinutesAgo: 15,
+      });
+
+      // C: còn hạn đăng ký — khách vẫn đổi được cách lên xe ở /customer/invoices.
+      await createShuttleBooking(tripC, {
+        seatCount: 2, status: "pending", method: "cash", addresses: [SHUTTLE_ADDRESSES[1]], note: null, paidMinutesAgo: 10,
+      });
+      await createShuttleBooking(tripC, {
+        seatCount: 1, status: "paid", method: "momo", addresses: [SHUTTLE_ADDRESSES[2]], note: "Gọi trước khi tới", paidMinutesAgo: 30,
+      });
+      console.log("   - Đã nạp 3 kịch bản xe trung chuyển (cần in lại / chờ in / còn hạn đăng ký) — xem /staff/shuttles.");
+    } else {
+      console.log("   - Bỏ qua kịch bản xe trung chuyển: không đủ 3 chuyến sắp chạy trên tuyến có trung chuyển.");
+    }
 
     // 10. Sự cố chuyến xe do tài xế báo:
     //   - 1 sự cố đã xử lý trên một chuyến đã chạy (trễ 25 phút, đã báo khách).
@@ -988,7 +1113,24 @@ const seedData = async () => {
   }
 };
 
-// Only seed if database connects successfully
-sequelize.authenticate().then(() => {
-  seedData();
-});
+// Rào chắn: seed XÓA toàn bộ dữ liệu hiện có (bước 1) — chỉ chạy trên DB *_dev/*_test
+// với cờ --yes, và chỉ khi schema đã được tạo bằng migration (npm run db:migrate).
+const guard = async () => {
+  assertDestructiveAllowed("Xóa dữ liệu hiện có và nạp dữ liệu mẫu");
+  await sequelize.authenticate();
+  const executed = await migrator.executed();
+  if (executed.length === 0) {
+    throw new Error('Database chưa có schema. Hãy chạy "npm run db:migrate" trước.');
+  }
+  const pending = await migrator.pending();
+  if (pending.length > 0) {
+    throw new Error(`Còn ${pending.length} migration chưa chạy. Hãy chạy "npm run db:migrate" trước.`);
+  }
+};
+
+guard()
+  .then(() => seedData())
+  .catch((error) => {
+    console.error("❌", error.message);
+    process.exit(1);
+  });

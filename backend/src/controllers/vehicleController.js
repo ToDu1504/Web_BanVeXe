@@ -1,6 +1,7 @@
 const { Op } = require('sequelize')
 const { Vehicle, Trip, TripTemplate, User } = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
+const { mapDbError } = require('../utils/dbErrors')
 
 const DRIVER_ATTRIBUTES = ['id', 'full_name', 'phone']
 
@@ -139,6 +140,8 @@ const vehicleController = {
       return res.status(201).json(vehicle)
     } catch (error) {
       console.error('Lỗi vehicle create:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi đăng ký xe khách mới.' })
     }
   },
@@ -190,6 +193,8 @@ const vehicleController = {
       return res.status(200).json(vehicle)
     } catch (error) {
       console.error('Lỗi vehicle update:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật thông tin xe.' })
     }
   },
@@ -218,6 +223,8 @@ const vehicleController = {
       return res.status(200).json({ success: true, message: 'Xóa phương tiện xe thành công.' })
     } catch (error) {
       console.error('Lỗi vehicle delete:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi xóa phương tiện.' })
     }
   },

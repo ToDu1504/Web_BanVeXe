@@ -10,12 +10,12 @@ import { Input } from '@/components/ui/input'
 import { DateInput } from '@/components/ui/date-input'
 import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
-import { formatDateTime, formatDate } from '@/lib/utils'
+import { formatDateTime, formatDate, toVNDateString } from '@/lib/utils'
 import { ClipboardList, Calendar } from 'lucide-react'
 import { toast } from 'sonner'
 import { fadeInUp } from '@/lib/motionVariants'
 
-const todayStr = () => new Date().toISOString().split('T')[0]
+const todayStr = () => toVNDateString()
 
 // Đối soát cuối ca: liệt kê MỌI lượt in vé trong khoảng ngày đã chọn — nhân
 // viên chỉ thấy lượt in của chính mình, quản trị viên thấy toàn bộ và có

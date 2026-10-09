@@ -1,5 +1,6 @@
 const { sequelize } = require('../config/db')
 const { Invoice, Ticket, Trip } = require('../models')
+const { isPastShuttleCutoff } = require('../utils/shuttle')
 
 // How long a 'pending' invoice may hold its seats before being auto-cancelled.
 // Split by payment_method, because the two cases mean very different things:
@@ -15,6 +16,17 @@ const CASH_HOLD_DEPARTURE_BUFFER_MINUTES = Number(process.env.CASH_HOLD_DEPARTUR
 const CHECK_INTERVAL_MS = 5 * 60 * 1000
 
 const isExpired = (invoice, now) => {
+  // Vé trung chuyển chưa thanh toán không được nằm trong danh sách đã chốt
+  // (md/DonKhachTrungChuyen.md R4): hủy ngay khi chuyến của vé đó qua mốc chốt,
+  // bất kể cash hay momo.
+  const shuttleLocked = invoice.Tickets.some((ticket) => (
+    ticket.booking_status === 'booked'
+    && ticket.pickup_type === 'shuttle'
+    && ticket.Trip
+    && isPastShuttleCutoff(ticket.Trip, new Date(now))
+  ))
+  if (shuttleLocked) return true
+
   const ageMs = now - new Date(invoice.created_at).getTime()
 
   if (invoice.payment_method === 'momo') {
@@ -55,7 +67,7 @@ const expirePendingInvoices = async () => {
     try {
       // Re-fetch and lock inside the transaction in case it was just paid/cancelled.
       const invoice = await Invoice.findByPk(id, {
-        include: [Ticket],
+        include: [{ model: Ticket, include: [Trip] }],
         transaction: t,
         lock: t.LOCK.UPDATE,
       })
@@ -80,9 +92,14 @@ const expirePendingInvoices = async () => {
         }
       }
 
-      const reasonLabel = invoice.payment_method === 'momo'
+      const reasonLabel = invoice.Tickets.some((tk) => tk.pickup_type === 'shuttle')
+        && invoice.Tickets.some((tk) => tk.Trip && isPastShuttleCutoff(tk.Trip))
+        ? 'chưa thanh toán khi chốt danh sách xe trung chuyển'
+        : invoice.payment_method === 'momo'
         ? `quá hạn thanh toán MoMo (${PENDING_INVOICE_TTL_MINUTES} phút)`
         : 'quá hạn giữ chỗ thanh toán tại quầy'
+      // FK tickets.invoice_id là RESTRICT: xóa vé trước rồi mới xóa hóa đơn.
+      await Ticket.destroy({ where: { invoice_id: invoice.id }, transaction: t })
       await invoice.destroy({ transaction: t })
       await t.commit()
       console.log(`⏱️  Tự động hủy hóa đơn #${id} do ${reasonLabel} và giải phóng ghế.`)

@@ -25,6 +25,8 @@ import InvoiceStatus from '@/components/features/InvoiceStatus'
 import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
 import TicketPrintView from '@/components/features/TicketPrintView'
+import ChangePickupDialog from '@/components/features/ChangePickupDialog'
+import { describePickup } from '@/lib/shuttle'
 import { Pagination } from '@/components/ui/pagination'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { Receipt, Search, Edit2, Eye, Loader2, Trash2, Printer } from 'lucide-react'
@@ -55,6 +57,7 @@ export default function ManageInvoice() {
   // Print ticket state
   const [printOpen, setPrintOpen] = useState(false)
   const [printTicketData, setPrintTicketData] = useState(null)
+  const [pickupTicket, setPickupTicket] = useState(null)
   const [reprintTarget, setReprintTarget] = useState(null)
   const [reprintReason, setReprintReason] = useState('')
   const [printing, setPrinting] = useState(false)
@@ -116,6 +119,14 @@ export default function ManageInvoice() {
     } catch (error) {
       toast.error(error.response?.data?.message || 'Có lỗi xảy ra khi hủy hóa đơn')
     }
+  }
+
+  const refreshAfterPickupChange = async () => {
+    const res = await invoiceApi.getAll({ page, limit: 10, search: debouncedSearch || undefined, status: statusFilter })
+    setInvoices(res.data)
+    setPagination(res.pagination)
+    const nextActive = res.data.find((inv) => inv.id === activeInvoice?.id)
+    if (nextActive) setActiveInvoice(nextActive)
   }
 
   const handleCancelTicket = async (ticketId) => {
@@ -460,6 +471,22 @@ export default function ManageInvoice() {
                             </div>
                           </div>
                           <p className="text-xs">Hành khách: {t.passenger_name} ({t.passenger_phone})</p>
+                          <div className="flex items-center justify-between gap-2 text-[11px]">
+                            <span className={t.pickup_type === 'shuttle' ? 'font-medium text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}>
+                              {describePickup(t, t.Trip?.Route)}
+                              {t.pickup_note && t.pickup_type === 'shuttle' ? ` (${t.pickup_note})` : ''}
+                            </span>
+                            {t.booking_status === 'booked' && t.Trip && t.Trip.status === 'scheduled'
+                              && (t.Trip.Route?.shuttle_enabled || t.pickup_type === 'shuttle') && (
+                              <Button
+                                variant="ghost"
+                                className="h-6 px-2 text-[10px] border rounded"
+                                onClick={() => setPickupTicket(t)}
+                              >
+                                Đổi cách lên xe
+                              </Button>
+                            )}
+                          </div>
                           {t.issued_at && (
                             <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
                               Đã xuất vé lúc {formatDateTime(t.issued_at)}{t.print_count > 1 ? ` (đã in ${t.print_count} lần)` : ''}
@@ -517,6 +544,14 @@ export default function ManageInvoice() {
       </AlertDialog>
 
       <TicketPrintView open={printOpen} onOpenChange={setPrintOpen} ticket={printTicketData} />
+
+      <ChangePickupDialog
+        ticket={pickupTicket}
+        open={!!pickupTicket}
+        onOpenChange={(v) => !v && setPickupTicket(null)}
+        privileged
+        onSaved={refreshAfterPickupChange}
+      />
     </motion.div>
   )
 }

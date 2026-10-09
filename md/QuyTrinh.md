@@ -115,6 +115,22 @@ Tra cứu Tuyến xe, Tra cứu Xe khách, Thống kê doanh thu, Đối soát i
 4. Nhân viên **chỉ xem được lượt in của chính mình** — giới hạn này được chặn ở cả
    frontend lẫn backend, không thể qua mặt bằng cách sửa tham số truy vấn.
 
+### 1.7. Danh sách đón xe trung chuyển (`/staff/shuttles`, mới)
+
+1. Trước giờ chạy `SHUTTLE_CUTOFF_MINUTES` (mặc định 120 phút), hệ thống **tự chốt danh sách đón** của chuyến
+   và gửi mail báo khách đi trung chuyển (nếu đã cấu hình SMTP).
+2. Chuyến xuất hiện trong trang **"Danh sách đón"** với nhãn **"Chưa in"**. Tích chọn một hoặc nhiều chuyến
+   (xe trung chuyển thường đón cho nhiều chuyến sát giờ nhau) rồi bấm **"In danh sách đã chọn"** — hoặc bấm **"In"**
+   từng dòng. Có thể in từ dialog "Danh sách khách" của chuyến.
+3. Tờ in gồm: tuyến, giờ chạy, giờ đón dự kiến, biển số, các **điểm đón** (khách cùng địa chỉ được gộp), họ tên, SĐT,
+   ghế, ghi chú, cột "Đã đón" và ô ký nhận. Đưa cho tài xế trung chuyển; tài xế **gọi điện từng khách** theo SĐT.
+4. Chỉ khách của hóa đơn **đã thanh toán** nằm trong danh sách. Khách đặt trung chuyển mà chưa trả tiền sẽ bị
+   hủy hóa đơn khi chuyến qua mốc chốt — nhân viên đặt hộ sau mốc chốt phải chuyển hóa đơn sang "Đã thanh toán" ngay.
+5. Nếu sau khi in có thay đổi (khách đổi cách lên xe, hủy vé, thanh toán muộn) chuyến quay lại hàng chờ với nhãn
+   **"Cần in lại"**; nếu cả chuyến bị hủy thì hiện nhãn đỏ — báo tài xế trung chuyển rồi bấm **"Đã xử lý"**.
+6. Khách gọi lên quầy muốn đổi cách lên xe: mở hóa đơn ở `/staff/invoices` → vé → **"Đổi cách lên xe"**
+   (nhân viên đổi được cả sau mốc chốt).
+
 ---
 
 ## Phần 2 — Quản trị viên (Admin)
@@ -130,6 +146,8 @@ doanh thu 7 ngày gần nhất, bảng lịch trình sắp khởi hành, và cá
 nhảy nhanh tới trang điều phối chuyến/tuyến/xe/người dùng.
 
 ### 2.2. Quản lý tuyến đường (`/admin/routes`)
+
+> Mới: form tuyến có **Địa chỉ bến xuất phát**, công tắc **Có xe trung chuyển đón khách** và **Khu vực phục vụ** — tuyến chỉ cho khách chọn xe trung chuyển khi bật công tắc này (tuyến cũ mặc định tắt).
 
 1. **"Thêm Tuyến Đường"**: điểm đi, điểm đến, cự ly (km), thời gian chạy (phút), giá
    vé gốc.

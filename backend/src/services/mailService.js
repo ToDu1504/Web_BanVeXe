@@ -71,10 +71,19 @@ const tripSummaryHtml = (trip) => {
     </ul>`
 }
 
+// Dòng "lên xe tại" của một vé: xe trung chuyển đón tại địa chỉ, hoặc tự đến bến.
+const pickupLineHtml = (ticket, trip) => {
+  if (ticket.pickup_type === 'shuttle' && ticket.pickup_address) {
+    return `<i>Xe trung chuyển đón tại: ${escapeHtml(ticket.pickup_address)} — vui lòng giữ máy.</i>`
+  }
+  const station = trip.Route?.origin_station
+  return `<i>Tự đến bến${station ? `: ${escapeHtml(station)}` : ''}.</i>`
+}
+
 // Nhắc khách: 1 mail / hóa đơn, liệt kê các ghế của hóa đơn đó trên chuyến.
 const sendDepartureReminder = ({ to, customerName, trip, tickets }) => {
   const rows = tickets
-    .map((t) => `<li>Ghế <b>${escapeHtml(t.seat_number)}</b> — ${escapeHtml(t.passenger_name)}</li>`)
+    .map((t) => `<li>Ghế <b>${escapeHtml(t.seat_number)}</b> — ${escapeHtml(t.passenger_name)}<br/>${pickupLineHtml(t, trip)}</li>`)
     .join('')
   return sendMail({
     to,
@@ -86,6 +95,23 @@ const sendDepartureReminder = ({ to, customerName, trip, tickets }) => {
       <p><b>Vé của bạn:</b></p>
       <ul>${rows}</ul>
       <p>Chúc quý khách thượng lộ bình an!</p>`,
+  })
+}
+
+// Báo khách đi xe trung chuyển rằng danh sách đón đã chốt (md/DonKhachTrungChuyen.md R5).
+const sendShuttleNotice = ({ to, customerName, trip, tickets, pickupTime }) => {
+  const rows = tickets
+    .map((t) => `<li>Ghế <b>${escapeHtml(t.seat_number)}</b> — ${escapeHtml(t.passenger_name)}: ${escapeHtml(t.pickup_address)}</li>`)
+    .join('')
+  return sendMail({
+    to,
+    subject: `Xe trung chuyển sẽ đón bạn — chuyến ${formatVNDateTime(trip.departure_time)}`,
+    html: `
+      <p>Xin chào ${escapeHtml(customerName)},</p>
+      <p>Danh sách đón của chuyến đã được chốt. Xe trung chuyển dự kiến đến đón khoảng <b>${formatVNDateTime(pickupTime)}</b>, tài xế sẽ gọi điện trước khi tới.</p>
+      ${tripSummaryHtml(trip)}
+      <ul>${rows}</ul>
+      <p>Vui lòng giữ máy và chuẩn bị sẵn sàng tại địa chỉ trên.</p>`,
   })
 }
 
@@ -138,6 +164,7 @@ module.exports = {
   isDeliverableEmail,
   sendMail,
   sendDepartureReminder,
+  sendShuttleNotice,
   sendDriverAssigned,
   sendDriverUnassigned,
   sendIncidentNotice,

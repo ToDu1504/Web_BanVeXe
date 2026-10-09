@@ -9,9 +9,11 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import InvoiceStatus from '@/components/features/InvoiceStatus'
+import ChangePickupDialog from '@/components/features/ChangePickupDialog'
+import { describePickup, isPastShuttleCutoff } from '@/lib/shuttle'
 import { Pagination } from '@/components/ui/pagination'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
-import { Ticket, Eye, Trash2, Calendar, Bus, Receipt, Info, Loader2 } from 'lucide-react'
+import { Ticket, Eye, Trash2, Calendar, Bus, Receipt, Info, Loader2, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { fadeInUp } from '@/lib/motionVariants'
@@ -34,6 +36,7 @@ export default function InvoiceHistory() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [cancellingId, setCancellingId] = useState(null)
   const [payingId, setPayingId] = useState(null)
+  const [pickupTicket, setPickupTicket] = useState(null)
 
   const fetchInvoices = async () => {
     try {
@@ -82,6 +85,15 @@ export default function InvoiceHistory() {
       toast.error(error.response?.data?.message || 'Không thể khởi tạo thanh toán MoMo')
       setPayingId(null)
     }
+  }
+
+  // Sau khi đổi cách lên xe: tải lại trang hiện tại và cập nhật hóa đơn đang mở.
+  const refreshAfterPickupChange = async () => {
+    const res = await invoiceApi.getMyInvoices({ page, limit: 10 })
+    setInvoices(res.data)
+    setPagination(res.pagination)
+    const next = res.data.find((inv) => inv.id === selectedInvoice?.id)
+    if (next) setSelectedInvoice(next)
   }
 
   const handleCancelTicket = async (ticketId) => {
@@ -314,6 +326,26 @@ export default function InvoiceHistory() {
                             </div>
                           </div>
 
+                          {/* Cách lên xe */}
+                          <div className="flex items-start justify-between gap-2 text-xs border-t border-[hsl(var(--border))] pt-2">
+                            <div className="flex items-start gap-1">
+                              <MapPin className="h-4 w-4 shrink-0 text-[hsl(var(--muted-foreground))]" />
+                              <div>
+                                <p className="font-medium">{describePickup(ticket, ticket.Trip?.Route)}</p>
+                                {ticket.pickup_note && ticket.pickup_type === 'shuttle' && (
+                                  <p className="text-[hsl(var(--muted-foreground))]">Ghi chú: {ticket.pickup_note}</p>
+                                )}
+                              </div>
+                            </div>
+                            {ticket.booking_status === 'booked' && ticket.Trip && !hasTripDeparted(ticket.Trip)
+                              && !isPastShuttleCutoff(ticket.Trip)
+                              && (ticket.Trip.Route?.shuttle_enabled || ticket.pickup_type === 'shuttle') && (
+                              <Button variant="outline" size="sm" onClick={() => setPickupTicket(ticket)}>
+                                Đổi cách lên xe
+                              </Button>
+                            )}
+                          </div>
+
                           {/* Individual ticket cancel button */}
                           {ticket.booking_status === 'booked' && ['pending', 'paid'].includes(selectedInvoice.payment_status) && !hasTripDeparted(ticket.Trip) && (
                             <div className="flex justify-end pt-2">
@@ -346,6 +378,13 @@ export default function InvoiceHistory() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ChangePickupDialog
+        ticket={pickupTicket}
+        open={!!pickupTicket}
+        onOpenChange={(v) => !v && setPickupTicket(null)}
+        onSaved={refreshAfterPickupChange}
+      />
     </div>
   )
 }

@@ -3,6 +3,8 @@ const { sequelize } = require('../config/db')
 const { Ticket, Invoice, Trip, Route, Vehicle, User, TicketPrint } = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
 const { hasTripDeparted } = require('../utils/tripScheduling')
+const { assertShuttleAllowed, isPastShuttleCutoff, normalizePickup } = require('../utils/shuttle')
+const { mapDbError } = require('../utils/dbErrors')
 
 const ticketController = {
   // @desc    Cancel a single ticket (of a pending or already-paid invoice)
@@ -76,6 +78,8 @@ const ticketController = {
           invoice.payment_status = 'refunded'
           await invoice.save({ transaction: t })
         } else {
+          // Hóa đơn chưa thu tiền: xóa hẳn (vé trước, vì FK RESTRICT).
+          await Ticket.destroy({ where: { invoice_id: invoice.id }, transaction: t })
           await invoice.destroy({ transaction: t })
         }
       }
@@ -85,7 +89,61 @@ const ticketController = {
     } catch (error) {
       await t.rollback()
       console.error('Lỗi cancelTicket:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi hủy vé.' })
+    }
+  },
+
+  // @desc    Đổi cách lên xe của vé (tự đến bến <-> xe trung chuyển)
+  // @route   PUT /api/tickets/:id/pickup
+  // @access  Private/Customer (vé của mình, trước mốc chốt), Staff/Admin
+  updatePickup: async (req, res) => {
+    const t = await sequelize.transaction()
+    try {
+      const ticket = await Ticket.findByPk(req.params.id, {
+        include: [Invoice, { model: Trip, include: [Route] }],
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      })
+
+      if (!ticket) {
+        await t.rollback()
+        return res.status(404).json({ message: 'Không tìm thấy vé xe.' })
+      }
+      if (req.user.role === 'customer' && ticket.Invoice?.user_id !== req.user.id) {
+        await t.rollback()
+        return res.status(403).json({ message: 'Bạn không có quyền thực hiện hành động này.' })
+      }
+      if (ticket.booking_status !== 'booked') {
+        await t.rollback()
+        return res.status(400).json({ message: 'Vé đã hủy, không thể đổi cách lên xe.' })
+      }
+      const trip = ticket.Trip
+      if (!trip || trip.status !== 'scheduled' || hasTripDeparted(trip)) {
+        await t.rollback()
+        return res.status(400).json({ message: 'Chuyến xe đã khởi hành hoặc không còn mở.' })
+      }
+      // Khách hàng chỉ đổi được trước mốc chốt (cả hai chiều); staff/admin luôn đổi được.
+      if (req.user.role === 'customer' && isPastShuttleCutoff(trip)) {
+        await t.rollback()
+        return res.status(400).json({ message: 'Đã quá hạn đổi cách lên xe. Vui lòng liên hệ quầy vé.' })
+      }
+      if (req.body.pickup_type === 'shuttle') {
+        assertShuttleAllowed(trip, trip.Route, { role: req.user.role })
+      }
+
+      Object.assign(ticket, normalizePickup(req.body), { pickup_updated_at: new Date() })
+      await ticket.save({ transaction: t })
+      await t.commit()
+      return res.status(200).json({ success: true, message: 'Đã cập nhật cách lên xe.' })
+    } catch (error) {
+      await t.rollback()
+      if (error.statusCode) return res.status(error.statusCode).json({ message: error.message })
+      console.error('Lỗi updatePickup:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
+      return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật cách lên xe.' })
     }
   },
 
@@ -157,6 +215,8 @@ const ticketController = {
           seat_number: ticket.seat_number,
           passenger_name: ticket.passenger_name,
           passenger_phone: ticket.passenger_phone,
+          pickup_type: ticket.pickup_type,
+          pickup_address: ticket.pickup_address,
           ticket_price: ticket.ticket_price,
           issued_at: ticket.issued_at,
           issued_by: ticket.issued_by,
@@ -168,6 +228,8 @@ const ticketController = {
     } catch (error) {
       await t.rollback()
       console.error('Lỗi printTicket:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi in vé.' })
     }
   },
@@ -283,6 +345,8 @@ const ticketController = {
       })
     } catch (error) {
       console.error('Lỗi setBoarded:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi điểm danh khách.' })
     }
   },

@@ -14,6 +14,7 @@ import EmptyState from '@/components/common/EmptyState'
 import { Pagination } from '@/components/ui/pagination'
 import TripStatus from '@/components/features/TripStatus'
 import { Badge } from '@/components/ui/badge'
+import ShuttleBadge from '@/components/features/ShuttleBadge'
 import { CalendarDays, Search, Eye, Loader2, RefreshCw, Bus, Users, Clock, AlertTriangle } from 'lucide-react'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -57,7 +58,9 @@ export default function ViewTrips() {
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  // Mặc định chỉ chuyến chưa chạy: danh sách sắp theo giờ đi tăng dần, nếu để
+  // "Tất cả" thì 21 ngày lịch sử đã chạy đứng trước các chuyến sắp khởi hành.
+  const [statusFilter, setStatusFilter] = useState('scheduled')
   const [timeFilter, setTimeFilter] = useState('all')
 
   // SeatMap Dialog state
@@ -217,6 +220,7 @@ export default function ViewTrips() {
                             {trip.open_incident_count} sự cố chưa xử lý
                           </Badge>
                         )}
+                        <ShuttleBadge trip={trip} />
                       </div>
                     </TableCell>
                     <TableCell className="text-xs">

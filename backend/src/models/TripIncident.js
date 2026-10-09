@@ -45,10 +45,7 @@ const TripIncident = sequelize.define('TripIncident', {
 }, {
   tableName: 'trip_incidents',
   timestamps: true,
-  indexes: [
-    { fields: ['trip_id'], name: 'idx_trip_incidents_trip' },
-    { fields: ['resolved_at', 'created_at'], name: 'idx_trip_incidents_open' },
-  ],
+  // Index, FK, CHECK: xem migrations/ (nguồn chuẩn của schema, md/ThietKeDatabase.md).
 })
 
 module.exports = TripIncident

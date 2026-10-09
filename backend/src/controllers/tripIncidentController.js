@@ -1,6 +1,7 @@
 const { Op } = require('sequelize')
 const { TripIncident, Trip, Route, Vehicle, User } = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
+const { mapDbError } = require('../utils/dbErrors')
 
 const tripIncidentController = {
   // @desc    Danh sách sự cố tài xế báo — lọc theo trạng thái xử lý; phân trang
@@ -62,6 +63,8 @@ const tripIncidentController = {
       return res.status(200).json(incident)
     } catch (error) {
       console.error('Lỗi trip incident resolve:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật sự cố.' })
     }
   },

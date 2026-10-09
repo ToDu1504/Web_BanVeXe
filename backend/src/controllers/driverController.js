@@ -9,6 +9,7 @@ const {
 } = require('../utils/dateVN')
 const { sendIncidentNotice } = require('../services/mailService')
 const { tripsOfDriver } = require('../utils/driverScheduling')
+const { mapDbError } = require('../utils/dbErrors')
 
 // Tài xế được bấm "Bắt đầu chạy" sớm tối đa bấy nhiêu phút trước giờ khởi hành.
 const START_EARLY_MINUTES = 60
@@ -259,6 +260,8 @@ const driverController = {
     } catch (error) {
       await t.rollback()
       console.error('Lỗi driver startTrip:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi bắt đầu chuyến.' })
     }
   },
@@ -288,6 +291,8 @@ const driverController = {
     } catch (error) {
       await t.rollback()
       console.error('Lỗi driver completeTrip:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi hoàn thành chuyến.' })
     }
   },
@@ -346,6 +351,8 @@ const driverController = {
       return res.status(201).json(incident)
     } catch (error) {
       console.error('Lỗi driver createIncident:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi báo sự cố.' })
     }
   },
@@ -532,6 +539,8 @@ const driverController = {
       return res.status(201).json(row)
     } catch (error) {
       console.error('Lỗi driver createUnavailability:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi đăng ký ngày nghỉ.' })
     }
   },
@@ -552,6 +561,8 @@ const driverController = {
       return res.status(200).json({ success: true, message: 'Đã hủy đăng ký nghỉ.' })
     } catch (error) {
       console.error('Lỗi driver deleteUnavailability:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi hủy đăng ký nghỉ.' })
     }
   },

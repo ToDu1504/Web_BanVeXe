@@ -29,6 +29,7 @@ import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
 import { Pagination } from '@/components/ui/pagination'
 import TripStatus from '@/components/features/TripStatus'
+import ShuttleBadge from '@/components/features/ShuttleBadge'
 import TripPassengersDialog from '@/components/features/TripPassengersDialog'
 import DriverSelect from '@/components/features/DriverSelect'
 import { useForm } from 'react-hook-form'
@@ -63,7 +64,9 @@ export default function ManageTrips() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  // Mặc định chỉ chuyến chưa chạy: danh sách sắp theo giờ đi tăng dần, nếu để
+  // "Tất cả" thì 21 ngày lịch sử đã chạy đứng trước các chuyến sắp khởi hành.
+  const [statusFilter, setStatusFilter] = useState('scheduled')
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -392,6 +395,7 @@ export default function ManageTrips() {
                           {trip.open_incident_count} sự cố
                         </Badge>
                       )}
+                      <ShuttleBadge trip={trip} />
                     </TableCell>
                     <TableCell className="text-xs">{formatDateTime(trip.departure_time)}</TableCell>
                     <TableCell className="font-semibold text-xs text-[hsl(var(--primary))]">

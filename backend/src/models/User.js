@@ -30,10 +30,12 @@ const User = sequelize.define('User', {
   },
   role: {
     type: DataTypes.ENUM('customer', 'staff', 'admin', 'driver'),
+    allowNull: false,
     defaultValue: 'customer',
   },
   is_active: {
     type: DataTypes.BOOLEAN,
+    allowNull: false,
     defaultValue: true,
   },
 }, {

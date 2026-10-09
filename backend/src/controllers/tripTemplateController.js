@@ -2,6 +2,7 @@ const { Op } = require('sequelize')
 const { TripTemplate, Trip, Ticket, Route, Vehicle, User } = require('../models')
 const { generateTripsFromTemplates } = require('../jobs/generateTripsFromTemplates')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
+const { mapDbError } = require('../utils/dbErrors')
 
 // Tài xế mặc định / tài xế phụ của mẫu: phải là tài khoản tài xế đang hoạt động,
 // và tài xế phụ khác tài xế chính. Trả về message lỗi hoặc null.
@@ -106,6 +107,8 @@ const tripTemplateController = {
       return res.status(201).json(template)
     } catch (error) {
       console.error('Lỗi trip template create:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi tạo mẫu chuyến lặp lại.' })
     }
   },
@@ -184,6 +187,8 @@ const tripTemplateController = {
       return res.status(200).json(template)
     } catch (error) {
       console.error('Lỗi trip template update:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật mẫu chuyến lặp lại.' })
     }
   },
@@ -203,6 +208,8 @@ const tripTemplateController = {
       return res.status(200).json({ success: true, message: 'Xóa mẫu chuyến lặp lại thành công.' })
     } catch (error) {
       console.error('Lỗi trip template delete:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi xóa mẫu chuyến lặp lại.' })
     }
   },

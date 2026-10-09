@@ -28,9 +28,7 @@ const DriverUnavailability = sequelize.define('DriverUnavailability', {
 }, {
   tableName: 'driver_unavailabilities',
   timestamps: true,
-  indexes: [
-    { fields: ['driver_id', 'start_date', 'end_date'], name: 'idx_driver_unavail' },
-  ],
+  // Index, FK, CHECK: xem migrations/ (nguồn chuẩn của schema, md/ThietKeDatabase.md).
 })
 
 module.exports = DriverUnavailability

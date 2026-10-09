@@ -9,6 +9,9 @@ const schemas = require('../utils/joiSchemas')
 // Protect cancellation endpoint for customers or admins
 router.delete('/:id', protect, authorize('customer', 'staff', 'admin'), ticketController.cancelTicket)
 
+// Đổi cách lên xe (tự đến bến / xe trung chuyển)
+router.put('/:id/pickup', protect, authorize('customer', 'staff', 'admin'), validate(schemas.updateTicketPickup), ticketController.updatePickup)
+
 // Quầy vé — in vé & đối soát cuối ca (staff/admin only)
 router.get('/prints', protect, authorize('staff', 'admin'), ticketController.getPrintLog)
 router.get('/:id/prints', protect, authorize('staff', 'admin'), ticketController.getPrintHistory)

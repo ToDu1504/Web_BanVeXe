@@ -18,6 +18,11 @@ export const ticketApi = {
     const response = await axiosInstance.put(`/tickets/${id}/board`, { boarded })
     return response.data
   },
+  // Đổi cách lên xe: { pickup_type: 'station' | 'shuttle', pickup_address?, pickup_note? }
+  updatePickup: async (id, data) => {
+    const response = await axiosInstance.put(`/tickets/${id}/pickup`, data)
+    return response.data
+  },
   getPrintLog: async (params = {}) => {
     const response = await axiosInstance.get('/tickets/prints', { params })
     return response.data

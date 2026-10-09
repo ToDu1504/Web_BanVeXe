@@ -24,6 +24,7 @@ import {
   ClipboardList,
   AlertTriangle,
   History,
+  Bus as ShuttleIcon,
   CalendarOff,
   User as UserIcon,
 } from 'lucide-react'
@@ -211,6 +212,12 @@ export default function AdminLayout({ children }) {
       title: 'Đối soát in vé',
       path: '/staff/print-log',
       icon: ClipboardList,
+      roles: ['staff', 'admin'],
+    },
+    {
+      title: 'Danh sách đón',
+      path: '/staff/shuttles',
+      icon: ShuttleIcon,
       roles: ['staff', 'admin'],
     },
     {

@@ -1,7 +1,10 @@
 const { Op } = require('sequelize')
 const { sequelize } = require('../config/db')
 const { Route, Trip } = require('../models')
+
+const blankToNull = (v) => (v === '' ? null : v)
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
+const { mapDbError } = require('../utils/dbErrors')
 
 const routeController = {
   // @desc    Get all routes — paginated when `page` is provided, otherwise
@@ -56,7 +59,7 @@ const routeController = {
   // @access  Private/Admin
   create: async (req, res) => {
     try {
-      const { origin, destination, distance_km, duration_min, base_price, create_return } = req.body
+      const { origin, destination, distance_km, duration_min, base_price, create_return, origin_station, shuttle_enabled, shuttle_area_note } = req.body
 
       // Tạo cả tuyến đi và tuyến về (B→A) trong cùng một transaction; bỏ qua
       // tuyến về nếu đã tồn tại hoặc điểm đi trùng điểm đến.
@@ -68,6 +71,9 @@ const routeController = {
           distance_km,
           duration_min,
           base_price,
+          origin_station: blankToNull(origin_station) ?? null,
+          shuttle_enabled: shuttle_enabled === true,
+          shuttle_area_note: blankToNull(shuttle_area_note) ?? null,
         }, { transaction: t })
 
         let returnRoute = null
@@ -95,6 +101,8 @@ const routeController = {
       }
     } catch (error) {
       console.error('Lỗi route create:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi thêm tuyến đường.' })
     }
   },
@@ -104,7 +112,7 @@ const routeController = {
   // @access  Private/Admin
   update: async (req, res) => {
     try {
-      const { origin, destination, distance_km, duration_min, base_price, is_active } = req.body
+      const { origin, destination, distance_km, duration_min, base_price, is_active, origin_station, shuttle_enabled, shuttle_area_note } = req.body
       const route = await Route.findByPk(req.params.id)
 
       if (!route) {
@@ -117,11 +125,16 @@ const routeController = {
       route.duration_min = duration_min !== undefined ? duration_min : route.duration_min
       route.base_price = base_price || route.base_price
       route.is_active = is_active !== undefined ? is_active : route.is_active
+      if (origin_station !== undefined) route.origin_station = blankToNull(origin_station)
+      if (shuttle_enabled !== undefined) route.shuttle_enabled = shuttle_enabled
+      if (shuttle_area_note !== undefined) route.shuttle_area_note = blankToNull(shuttle_area_note)
 
       await route.save()
       return res.status(200).json(route)
     } catch (error) {
       console.error('Lỗi route update:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật tuyến đường.' })
     }
   },
@@ -150,6 +163,8 @@ const routeController = {
       return res.status(200).json({ success: true, message: 'Xóa tuyến đường thành công.' })
     } catch (error) {
       console.error('Lỗi route delete:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi xóa tuyến đường.' })
     }
   },

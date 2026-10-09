@@ -74,6 +74,9 @@ const schemas = {
     base_price: Joi.number().min(1000).required(),
     // Tự tạo luôn tuyến chiều về (destination → origin). Mặc định bật.
     create_return: Joi.boolean().default(true),
+    origin_station: Joi.string().trim().max(255).allow('', null).optional(),
+    shuttle_enabled: Joi.boolean().optional(),
+    shuttle_area_note: Joi.string().trim().max(255).allow('', null).optional(),
   }),
 
   updateRoute: Joi.object({
@@ -83,6 +86,28 @@ const schemas = {
     duration_min: Joi.number().integer().positive().optional(),
     base_price: Joi.number().min(1000).optional(),
     is_active: Joi.boolean().optional(),
+    origin_station: Joi.string().trim().max(255).allow('', null).optional(),
+    shuttle_enabled: Joi.boolean().optional(),
+    shuttle_area_note: Joi.string().trim().max(255).allow('', null).optional(),
+  }),
+
+  // Đổi cách lên xe của một vé (tự đến bến <-> xe trung chuyển)
+  updateTicketPickup: Joi.object({
+    pickup_type: Joi.string().valid('station', 'shuttle').required(),
+    pickup_address: Joi.when('pickup_type', {
+      is: 'shuttle',
+      then: Joi.string().trim().min(5).max(255).required().messages({
+        'string.min': 'Địa chỉ đón phải có ít nhất 5 ký tự.',
+        'any.required': 'Vui lòng nhập địa chỉ để xe trung chuyển đón.',
+        'string.empty': 'Vui lòng nhập địa chỉ để xe trung chuyển đón.',
+      }),
+      otherwise: Joi.any().strip(),
+    }),
+    pickup_note: Joi.string().trim().max(255).allow('', null).optional(),
+  }),
+
+  markShuttlePrinted: Joi.object({
+    trip_ids: Joi.array().items(Joi.number().integer()).min(1).required(),
   }),
 
   // Vehicle CRUD
@@ -182,6 +207,17 @@ const schemas = {
         passenger_name: Joi.string().min(2).required(),
         passenger_phone: Joi.string().pattern(/^(0[3|5|7|8|9])+([0-9]{8})$/).required(),
         ticket_price: Joi.number().optional(),
+        pickup_type: Joi.string().valid('station', 'shuttle').default('station'),
+        pickup_address: Joi.when('pickup_type', {
+          is: 'shuttle',
+          then: Joi.string().trim().min(5).max(255).required().messages({
+            'string.min': 'Địa chỉ đón phải có ít nhất 5 ký tự.',
+            'any.required': 'Vui lòng nhập địa chỉ để xe trung chuyển đón.',
+            'string.empty': 'Vui lòng nhập địa chỉ để xe trung chuyển đón.',
+          }),
+          otherwise: Joi.any().strip(),
+        }),
+        pickup_note: Joi.string().trim().max(255).allow('', null).optional(),
       })
     ).min(1).required(),
   }),

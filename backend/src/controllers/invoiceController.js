@@ -3,6 +3,8 @@ const { sequelize } = require('../config/db')
 const { Invoice, Ticket, Trip, Route, Vehicle, User } = require('../models')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
 const { hasTripDeparted } = require('../utils/tripScheduling')
+const { assertShuttleAllowed, normalizePickup } = require('../utils/shuttle')
+const { mapDbError } = require('../utils/dbErrors')
 
 // Tài xế của chuyến hiển thị kèm vé (chỉ tên — không lộ SĐT tài xế cho khách).
 const TRIP_DRIVER_INCLUDE = { model: User, as: 'Driver', attributes: ['id', 'full_name'] }
@@ -75,6 +77,20 @@ const invoiceController = {
         }
       }
 
+      // Xe trung chuyển (R1/R2): chỉ tuyến bật shuttle_enabled và trước mốc chốt
+      // (staff/admin được bỏ qua mốc chốt). Ghi pickup_updated_at để danh sách
+      // đón biết vé này mới vào.
+      const shuttleTripIds = [...new Set(tickets.filter((tk) => tk.pickup_type === 'shuttle').map((tk) => tk.trip_id))]
+      if (shuttleTripIds.length > 0) {
+        const routeIds = [...new Set(shuttleTripIds.map((id) => tripsById.get(id).route_id))]
+        const routes = await Route.findAll({ where: { id: routeIds }, transaction: t })
+        const routesById = new Map(routes.map((r) => [r.id, r]))
+        for (const tripId of shuttleTripIds) {
+          const trip = tripsById.get(tripId)
+          assertShuttleAllowed(trip, routesById.get(trip.route_id), { role: req.user.role })
+        }
+      }
+
       // Group tickets by trip_id to update available_seats later, and
       // compute the authoritative ticket/total price from Trip.price.
       const tripSeatCounts = {}
@@ -89,7 +105,12 @@ const invoiceController = {
         tripSeatCounts[trip_id] = (tripSeatCounts[trip_id] || 0) + 1
         total_price += Number(ticket_price)
 
-        ticketsToCreate.push({ trip_id, seat_number, passenger_name, passenger_phone, ticket_price })
+        const pickup = normalizePickup(tInfo)
+        ticketsToCreate.push({
+          trip_id, seat_number, passenger_name, passenger_phone, ticket_price,
+          ...pickup,
+          pickup_updated_at: pickup.pickup_type === 'shuttle' ? new Date() : null,
+        })
       }
 
       // Create Invoice
@@ -132,6 +153,10 @@ const invoiceController = {
       await t.rollback()
       console.error('Lỗi khi tạo hóa đơn:', error)
 
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ message: error.message })
+      }
+
       // Handle Double Booking Unique Constraint Error
       if (error.name === 'SequelizeUniqueConstraintError') {
         return res.status(409).json({
@@ -139,6 +164,8 @@ const invoiceController = {
         })
       }
 
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({
         message: error.message || 'Lỗi hệ thống khi đặt vé. Vui lòng thử lại.',
       })
@@ -250,8 +277,10 @@ const invoiceController = {
         invoice.payment_status = 'refunded'
         await invoice.save({ transaction: t })
       } else {
-        // Still pending — nothing was ever collected, delete outright
-        // (cascade deletes tickets and releases the trip/seat unique key).
+        // Still pending — nothing was ever collected, delete outright. FK
+        // tickets.invoice_id là RESTRICT: xóa vé trước (giải phóng luôn khóa
+        // uq_trip_active_seat), rồi mới xóa hóa đơn.
+        await Ticket.destroy({ where: { invoice_id: invoice.id }, transaction: t })
         await invoice.destroy({ transaction: t })
       }
 
@@ -260,6 +289,8 @@ const invoiceController = {
     } catch (error) {
       await t.rollback()
       console.error('Lỗi cancelInvoice:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi hủy hóa đơn.' })
     }
   },
@@ -389,7 +420,17 @@ const invoiceController = {
       }
 
       invoice.payment_status = payment_status
+      if (payment_status === 'paid' && prevStatus !== 'paid') invoice.paid_at = new Date()
       await invoice.save({ transaction: t })
+
+      // Hóa đơn vừa thanh toán: vé trung chuyển của nó giờ mới đủ điều kiện vào
+      // danh sách đón (R4/R7).
+      if (payment_status === 'paid' && prevStatus !== 'paid') {
+        await Ticket.update(
+          { pickup_updated_at: new Date() },
+          { where: { invoice_id: invoice.id, pickup_type: 'shuttle' }, transaction: t },
+        )
+      }
 
       // If status is updated to refunded, release the seats and cancel the tickets
       if (payment_status === 'refunded' && prevStatus !== 'refunded') {
@@ -420,6 +461,8 @@ const invoiceController = {
     } catch (error) {
       await t.rollback()
       console.error('Lỗi updateStatus:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật hóa đơn.' })
     }
   },

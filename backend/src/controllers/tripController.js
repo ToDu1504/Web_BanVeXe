@@ -5,6 +5,8 @@ const { findVehicleScheduleConflict } = require('../utils/tripScheduling')
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
 const { validateDriverPair } = require('../utils/driverScheduling')
 const { sendDriverAssigned, sendDriverUnassigned } = require('../services/mailService')
+const { countShuttleByTrip, SHUTTLE_CUTOFF_MINUTES } = require('../utils/shuttle')
+const { mapDbError } = require('../utils/dbErrors')
 
 const DRIVER_ATTRIBUTES = ['id', 'full_name', 'phone', 'email']
 // Endpoint công khai (tìm kiếm/chi tiết chuyến) chỉ lộ tên tài xế.
@@ -26,7 +28,12 @@ const withOpenIncidentCounts = async (trips) => {
     })
     for (const row of rows) counts.set(row.trip_id, Number(row.open))
   }
-  return trips.map((trip) => ({ ...trip.toJSON(), open_incident_count: counts.get(trip.id) || 0 }))
+  const shuttleCounts = await countShuttleByTrip(ids)
+  return trips.map((trip) => ({
+    ...trip.toJSON(),
+    open_incident_count: counts.get(trip.id) || 0,
+    shuttle_count: shuttleCounts.get(trip.id) || 0,
+  }))
 }
 
 // Gửi mail phân công cho tài xế mới / hủy phân công cho tài xế cũ. Chạy SAU khi
@@ -128,7 +135,8 @@ const tripController = {
         return res.status(404).json({ message: 'Không tìm thấy chuyến xe.' })
       }
 
-      return res.status(200).json(trip)
+      // Form đặt vé cần biết mốc chốt đăng ký xe trung chuyển để khóa lựa chọn đúng lúc.
+      return res.status(200).json({ ...trip.toJSON(), shuttle_cutoff_minutes: SHUTTLE_CUTOFF_MINUTES })
     } catch (error) {
       console.error('Lỗi trip getById:', error)
       return res.status(500).json({ message: 'Lỗi máy chủ khi lấy chi tiết chuyến xe.' })
@@ -185,7 +193,7 @@ const tripController = {
       const tickets = await Ticket.findAll({
         where: { trip_id: req.params.id },
         ...(isDriver
-          ? { attributes: ['id', 'seat_number', 'passenger_name', 'passenger_phone', 'booking_status', 'boarded_at'] }
+          ? { attributes: ['id', 'seat_number', 'passenger_name', 'passenger_phone', 'booking_status', 'boarded_at', 'pickup_type', 'pickup_address', 'pickup_note'] }
           : { include: [{ model: Invoice, attributes: ['id', 'payment_status', 'payment_method'] }] }),
         order: [['seat_number', 'ASC']],
       })
@@ -326,6 +334,8 @@ const tripController = {
       return res.status(201).json(trip)
     } catch (error) {
       console.error('Lỗi trip create:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi lập lịch chuyến chạy mới.' })
     }
   },
@@ -483,6 +493,8 @@ const tripController = {
             invoice.payment_status = 'refunded'
             await invoice.save({ transaction: t })
           } else if (invoice.payment_status === 'pending') {
+            // Chưa thu tiền: xóa hẳn hóa đơn — vé trước vì FK RESTRICT.
+            await Ticket.destroy({ where: { invoice_id: invoice.id }, transaction: t })
             await invoice.destroy({ transaction: t })
           }
         }
@@ -498,6 +510,8 @@ const tripController = {
     } catch (error) {
       await t.rollback()
       console.error('Lỗi trip update:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật chuyến xe.' })
     }
   },
@@ -527,6 +541,8 @@ const tripController = {
       return res.status(200).json({ success: true, message: 'Xóa chuyến xe thành công.' })
     } catch (error) {
       console.error('Lỗi trip delete:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi xóa chuyến xe.' })
     }
   },

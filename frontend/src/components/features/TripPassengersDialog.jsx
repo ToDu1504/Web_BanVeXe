@@ -9,8 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import InvoiceStatus from '@/components/features/InvoiceStatus'
 import EmptyState from '@/components/common/EmptyState'
+import ShuttlePickupSheet from '@/components/features/ShuttlePickupSheet'
+import { useShuttlePrint } from '@/hooks/useShuttlePrint'
 import { formatDateTime } from '@/lib/utils'
-import { Users, Loader2, Printer } from 'lucide-react'
+import { Users, Loader2, Printer, Bus } from 'lucide-react'
 import { toast } from 'sonner'
 
 const vehicleTypeLabels = {
@@ -55,6 +57,11 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId, onBoa
   }, [open, tripId])
 
   const bookedTickets = tickets.filter((t) => t.booking_status === 'booked')
+  // Chỉ vé của hóa đơn đã thanh toán mới vào danh sách đón (R4).
+  const shuttleTickets = bookedTickets.filter((t) => t.pickup_type === 'shuttle' && t.Invoice?.payment_status === 'paid')
+
+  // In danh sách đón cho tài xế trung chuyển — chỉ staff/admin (tài xế chỉ xem cột "Lên xe tại").
+  const shuttlePrint = useShuttlePrint()
   const boardedCount = bookedTickets.filter((t) => t.boarded_at).length
   // Chỉ điểm danh được khi chuyến còn đang chờ/đang chạy (backend cũng chặn).
   const canBoard = trip && ['scheduled', 'ongoing'].includes(trip.status)
@@ -81,7 +88,7 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId, onBoa
   // ở đây có max-h-[90vh] overflow-y-auto (cần thiết cho bảng xem trên màn hình
   // dài), nếu để phiếu in nằm bên trong thì khi in nó bị cắt theo vùng cuộn của
   // dialog thay vì tràn hết trang giấy.
-  const printManifest = open && trip && (
+  const printManifest = open && trip && !shuttlePrint.entries && (
     <div className="manifest-print-area hidden print:block space-y-3 p-6">
       <div className="text-center">
         <p className="text-lg font-bold">DANH SÁCH HÀNH KHÁCH</p>
@@ -105,6 +112,7 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId, onBoa
             <th className="border border-black p-1">Ghế</th>
             <th className="border border-black p-1">Họ tên</th>
             <th className="border border-black p-1">SĐT</th>
+            <th className="border border-black p-1">Lên xe tại</th>
             {!isDriver && <th className="border border-black p-1">Thanh toán</th>}
             <th className="border border-black p-1 w-16">Đối chiếu</th>
           </tr>
@@ -116,6 +124,9 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId, onBoa
               <td className="border border-black p-1 text-center font-bold">{t.seat_number}</td>
               <td className="border border-black p-1">{t.passenger_name}</td>
               <td className="border border-black p-1">{t.passenger_phone}</td>
+              <td className="border border-black p-1">
+                {t.pickup_type === 'shuttle' ? `Trung chuyển: ${t.pickup_address}` : 'Tại bến'}
+              </td>
               {!isDriver && (
                 <td className="border border-black p-1 text-center">
                   {t.Invoice?.payment_status === 'paid' ? 'Đã TT' : (
@@ -135,6 +146,7 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId, onBoa
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {printManifest && createPortal(printManifest, document.body)}
+      <ShuttlePickupSheet entries={shuttlePrint.entries} onDone={shuttlePrint.handleDone} />
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <style>{`
           @media print {
@@ -164,7 +176,19 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId, onBoa
           </div>
         ) : tickets.length > 0 ? (
           <>
-            <div className="flex justify-end no-print">
+            <div className="flex justify-end gap-2 no-print">
+              {!isDriver && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => shuttlePrint.print([tripId])}
+                  disabled={shuttleTickets.length === 0 || shuttlePrint.loading}
+                  title={shuttleTickets.length === 0 ? 'Chuyến này không có khách đi trung chuyển' : undefined}
+                >
+                  {shuttlePrint.loading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Bus className="h-4 w-4 mr-1.5" />}
+                  In danh sách đón ({shuttleTickets.length})
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => window.print()} disabled={bookedTickets.length === 0}>
                 <Printer className="h-4 w-4 mr-1.5" /> In danh sách khách
               </Button>
@@ -176,6 +200,7 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId, onBoa
                 <TableRow>
                   <TableHead>Ghế</TableHead>
                   <TableHead>Hành khách</TableHead>
+                  <TableHead>Lên xe tại</TableHead>
                   {!isDriver && <TableHead>Mã HĐ</TableHead>}
                   {!isDriver && <TableHead>Thanh toán</TableHead>}
                   {!isDriver && <TableHead>Xuất vé</TableHead>}
@@ -191,6 +216,19 @@ export default function TripPassengersDialog({ open, onOpenChange, tripId, onBoa
                       <div className="text-[10px] text-[hsl(var(--muted-foreground))]">{t.passenger_phone}</div>
                       {t.booking_status === 'cancelled' && (
                         <Badge variant="destructive" className="mt-1 text-[10px]">Đã hủy</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {t.pickup_type === 'shuttle' ? (
+                        <>
+                          <Badge variant="accent" className="text-[10px]">🚐 Trung chuyển</Badge>
+                          <div className="mt-0.5">{t.pickup_address}</div>
+                          {t.pickup_note && (
+                            <div className="text-[10px] text-[hsl(var(--muted-foreground))]">{t.pickup_note}</div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[hsl(var(--muted-foreground))]">Tại bến</span>
                       )}
                     </TableCell>
                     {!isDriver && <TableCell className="text-xs font-semibold">HD-{t.invoice_id}</TableCell>}

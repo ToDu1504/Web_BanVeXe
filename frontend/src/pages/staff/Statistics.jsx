@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import StatsChart from '@/components/features/StatsChart'
 import StatCard from '@/components/features/StatCard'
 import { BarChart3, TrendingUp, Ticket, ShieldAlert, Calendar, Loader2, Download } from 'lucide-react'
-import { formatCurrency, formatDateTime, formatDate, exportToCsv } from '@/lib/utils'
+import { formatCurrency, formatDateTime, formatDate, exportToCsv, toVNDateString, addDays } from '@/lib/utils'
 import { toast } from 'sonner'
 import { fadeInUp, staggerContainer } from '@/lib/motionVariants'
 
@@ -31,10 +31,8 @@ export default function Statistics() {
         const overview = await statsApi.getStats()
 
         // Construct query range dates
-        const endDate = new Date().toISOString().split('T')[0]
-        const startDateObj = new Date()
-        startDateObj.setDate(startDateObj.getDate() - parseInt(timeRange))
-        const startDate = startDateObj.toISOString().split('T')[0]
+        const endDate = toVNDateString()
+        const startDate = addDays(endDate, -parseInt(timeRange))
 
         // Fetch dynamic revenue chart data
         const chartData = await statsApi.getRevenue({ startDate, endDate })
@@ -81,7 +79,7 @@ export default function Statistics() {
       ...stats.popularRoutes.map((r) => [r.date, r.revenue, r.ticketCount]),
     ]
 
-    const filename = `bao-cao-thong-ke_${endDateObj.toISOString().split('T')[0]}.csv`
+    const filename = `bao-cao-thong-ke_${toVNDateString(endDateObj)}.csv`
     exportToCsv(filename, rows)
     toast.success('Đã xuất báo cáo thành công!')
   }

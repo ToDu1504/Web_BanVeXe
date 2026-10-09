@@ -57,10 +57,7 @@ const TripTemplate = sequelize.define('TripTemplate', {
 }, {
   tableName: 'trip_templates',
   timestamps: true,
-  indexes: [
-    { fields: ['route_id'] },
-    { fields: ['vehicle_id'] },
-  ],
+  // Index, FK, CHECK: xem migrations/ (nguồn chuẩn của schema, md/ThietKeDatabase.md).
 })
 
 module.exports = TripTemplate

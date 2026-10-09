@@ -5,6 +5,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { FormField } from '@/components/ui/form-field'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -38,6 +39,10 @@ const routeSchema = zod.object({
   base_price: zod.coerce.number().min(1000, 'Giá gốc tối thiểu là 1,000đ'),
   // Chỉ dùng khi thêm mới: tự tạo luôn tuyến chiều về (điểm đến → điểm đi).
   create_return: zod.boolean().optional(),
+  // Bến xuất phát + xe trung chuyển (md/DonKhachTrungChuyen.md)
+  origin_station: zod.string().max(255, 'Tối đa 255 ký tự').optional(),
+  shuttle_enabled: zod.boolean().optional(),
+  shuttle_area_note: zod.string().max(255, 'Tối đa 255 ký tự').optional(),
 })
 
 export default function ManageRoutes() {
@@ -96,7 +101,7 @@ export default function ManageRoutes() {
 
   const handleOpenAdd = () => {
     setEditingRoute(null)
-    reset({ origin: '', destination: '', distance_km: 0, duration_min: 0, base_price: 0, create_return: true })
+    reset({ origin: '', destination: '', distance_km: 0, duration_min: 0, base_price: 0, create_return: true, origin_station: '', shuttle_enabled: false, shuttle_area_note: '' })
     setDialogOpen(true)
   }
 
@@ -109,6 +114,9 @@ export default function ManageRoutes() {
       duration_min: route.duration_min,
       base_price: route.base_price,
       create_return: false,
+      origin_station: route.origin_station || '',
+      shuttle_enabled: !!route.shuttle_enabled,
+      shuttle_area_note: route.shuttle_area_note || '',
     })
     setDialogOpen(true)
   }
@@ -187,6 +195,7 @@ export default function ManageRoutes() {
                   <TableHead>Cự ly (km)</TableHead>
                   <TableHead>Thời gian</TableHead>
                   <TableHead>Giá gốc</TableHead>
+                  <TableHead>Trung chuyển</TableHead>
                   <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
@@ -201,6 +210,11 @@ export default function ManageRoutes() {
                     <TableCell className="text-xs">{formatDuration(route.duration_min)}</TableCell>
                     <TableCell className="font-semibold text-xs text-[hsl(var(--primary))]">
                       {formatCurrency(route.base_price)}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {route.shuttle_enabled
+                        ? <Badge variant="success">Có</Badge>
+                        : <span className="text-[hsl(var(--muted-foreground))]">—</span>}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1.5">
@@ -314,6 +328,42 @@ export default function ManageRoutes() {
                   className={errors.base_price ? 'border-[hsl(var(--destructive))]' : ''}
                 />
               </FormField>
+
+              <FormField label="Địa chỉ bến xuất phát" htmlFor="origin_station" error={errors.origin_station?.message}>
+                <Input
+                  id="origin_station"
+                  placeholder="Bến xe Miền Đông, 292 Đinh Bộ Lĩnh, Bình Thạnh"
+                  {...register('origin_station')}
+                />
+              </FormField>
+
+              <label
+                htmlFor="shuttle_enabled"
+                className="flex cursor-pointer items-start gap-2.5 rounded-md border border-[hsl(var(--border))] p-3 text-sm"
+              >
+                <input
+                  id="shuttle_enabled"
+                  type="checkbox"
+                  {...register('shuttle_enabled')}
+                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--primary))]"
+                />
+                <span>
+                  <span className="font-medium">Có xe trung chuyển đón khách</span>
+                  <span className="block text-xs text-[hsl(var(--muted-foreground))]">
+                    Khách có thể chọn để xe trung chuyển đón tận nơi trước giờ chạy (miễn phí).
+                  </span>
+                </span>
+              </label>
+
+              {watch('shuttle_enabled') && (
+                <FormField label="Khu vực phục vụ" htmlFor="shuttle_area_note" error={errors.shuttle_area_note?.message}>
+                  <Input
+                    id="shuttle_area_note"
+                    placeholder="Nội thành Q1, Q3, Q5, Q10, Bình Thạnh…"
+                    {...register('shuttle_area_note')}
+                  />
+                </FormField>
+              )}
 
               {!editingRoute && (
                 <label

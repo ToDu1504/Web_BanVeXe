@@ -1,5 +1,6 @@
 const { User } = require('../models')
 const jwt = require('jsonwebtoken')
+const { mapDbError } = require('../utils/dbErrors')
 
 // Helper to generate JWT and set HttpOnly Cookie
 const sendTokenResponse = (user, statusCode, res) => {
@@ -71,6 +72,8 @@ const authController = {
       })
     } catch (error) {
       console.error('Lỗi register:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi đăng ký tài khoản.' })
     }
   },
@@ -165,6 +168,8 @@ const authController = {
       })
     } catch (error) {
       console.error('Lỗi updateProfile:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật thông tin.' })
     }
   },
@@ -191,6 +196,8 @@ const authController = {
       return res.status(200).json({ success: true, message: 'Thay đổi mật khẩu thành công.' })
     } catch (error) {
       console.error('Lỗi changePassword:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi thay đổi mật khẩu.' })
     }
   },

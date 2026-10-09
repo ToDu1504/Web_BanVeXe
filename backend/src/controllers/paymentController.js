@@ -1,4 +1,4 @@
-const { Invoice } = require('../models')
+const { Invoice, Ticket } = require('../models')
 const momoService = require('../services/momoService')
 
 // orderId gửi cho MoMo được mã hóa dạng INV{invoiceId}-{timestamp} để
@@ -19,7 +19,13 @@ const applyMomoResult = async (payload) => {
 
   if (String(payload.resultCode) === '0' && invoice.payment_status === 'pending') {
     invoice.payment_status = 'paid'
+    invoice.paid_at = new Date()
     await invoice.save()
+    // Vé trung chuyển chỉ vào danh sách đón khi hóa đơn đã paid (R4/R7).
+    await Ticket.update(
+      { pickup_updated_at: new Date() },
+      { where: { invoice_id: invoice.id, pickup_type: 'shuttle' } },
+    )
   }
 
   return invoice

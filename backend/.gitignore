@@ -2,3 +2,6 @@ node_modules/
 .env
 dist/
 *.log
+
+# Bản sao lưu database (npm run db:backup)
+backups/

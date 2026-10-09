@@ -31,6 +31,21 @@ const Route = sequelize.define('Route', {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
   },
+  // Địa chỉ bến/văn phòng xuất phát — khách "tự đến bến" có mặt tại đây.
+  origin_station: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+  },
+  // Tuyến có xe trung chuyển đón khách trước giờ chạy hay không.
+  shuttle_enabled: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  },
+  shuttle_area_note: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+  },
 }, {
   tableName: 'routes',
   timestamps: true,

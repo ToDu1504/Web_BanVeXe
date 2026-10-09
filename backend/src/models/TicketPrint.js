@@ -47,11 +47,7 @@ const TicketPrint = sequelize.define('TicketPrint', {
 }, {
   tableName: 'ticket_prints',
   timestamps: false,
-  indexes: [
-    { fields: ['ticket_id'] },
-    { fields: ['printed_at'] },
-    { fields: ['printed_by', 'printed_at'] },
-  ],
+  // Index, FK, CHECK: xem migrations/ (nguồn chuẩn của schema, md/ThietKeDatabase.md).
 })
 
 module.exports = TicketPrint

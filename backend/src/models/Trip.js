@@ -68,23 +68,20 @@ const Trip = sequelize.define('Trip', {
     type: DataTypes.DATE,
     allowNull: true,
   },
+  // Mốc chốt danh sách đón trung chuyển (jobs/lockShuttleLists.js) và lần in
+  // danh sách gần nhất tại quầy (POST /api/shuttles/mark-printed).
+  shuttle_locked_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  shuttle_list_printed_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
 }, {
   tableName: 'trips',
   timestamps: true,
-  indexes: [
-    {
-      fields: ['template_id', 'departure_time'],
-      name: 'idx_trip_template_departure',
-    },
-    {
-      fields: ['driver_id', 'departure_time'],
-      name: 'idx_trips_driver',
-    },
-    {
-      fields: ['co_driver_id', 'departure_time'],
-      name: 'idx_trips_co_driver',
-    },
-  ],
+  // Index, FK, CHECK: xem migrations/ (nguồn chuẩn của schema, md/ThietKeDatabase.md).
 })
 
 module.exports = Trip

@@ -6,6 +6,7 @@ const {
 const { getPagination, buildPaginationMeta } = require('../utils/pagination')
 const { DEFAULT_TRIP_DURATION_MS, getEffectiveArrivalMs } = require('../utils/tripScheduling')
 const { toVNDateString, isValidDateString } = require('../utils/dateVN')
+const { mapDbError } = require('../utils/dbErrors')
 
 // Số chuyến sắp/đang chạy còn gắn với tài xế — chặn xóa/đổi role khi > 0.
 const countActiveDriverTrips = (driverId) => Trip.count({
@@ -84,6 +85,8 @@ const userController = {
       })
     } catch (error) {
       console.error('Lỗi user create:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi tạo tài khoản.' })
     }
   },
@@ -119,6 +122,8 @@ const userController = {
       return res.status(200).json({ success: true, message: 'Cập nhật phân quyền thành công.', user })
     } catch (error) {
       console.error('Lỗi user updateRole:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi đổi vai trò.' })
     }
   },
@@ -150,6 +155,8 @@ const userController = {
       })
     } catch (error) {
       console.error('Lỗi user updateStatus:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật trạng thái.' })
     }
   },
@@ -203,6 +210,8 @@ const userController = {
       return res.status(200).json({ success: true, message: 'Xóa tài khoản thành công.' })
     } catch (error) {
       console.error('Lỗi user delete:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi xóa tài khoản.' })
     }
   },
@@ -403,6 +412,8 @@ const userController = {
       })
     } catch (error) {
       console.error('Lỗi resolveOrCreateCustomer:', error)
+      const dbError = mapDbError(error)
+      if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi xử lý thông tin khách hàng.' })
     }
   },

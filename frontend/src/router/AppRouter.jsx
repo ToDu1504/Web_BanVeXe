@@ -30,6 +30,7 @@ import ViewRoutes from '@/pages/staff/ViewRoutes'
 import ViewVehicles from '@/pages/staff/ViewVehicles'
 import PrintReconciliation from '@/pages/staff/PrintReconciliation'
 import TripIncidents from '@/pages/staff/TripIncidents'
+import ShuttlePickups from '@/pages/staff/ShuttlePickups'
 
 // Driver Protected Pages
 import MyTrips from '@/pages/driver/MyTrips'
@@ -208,6 +209,17 @@ export default function AppRouter() {
           <PrivateRoute allowedRoles={['staff', 'admin']}>
             <AdminLayout>
               <PrintReconciliation />
+            </AdminLayout>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/staff/shuttles"
+        element={
+          <PrivateRoute allowedRoles={['staff', 'admin']}>
+            <AdminLayout>
+              <ShuttlePickups />
             </AdminLayout>
           </PrivateRoute>
         }

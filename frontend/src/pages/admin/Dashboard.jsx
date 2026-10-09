@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import StatCard from '@/components/features/StatCard'
 import StatsChart from '@/components/features/StatsChart'
 import { Bus, Users, Ticket, Activity, Calendar, TrendingUp, Loader2 } from 'lucide-react'
-import { formatCurrency, formatDateTime } from '@/lib/utils'
+import { formatCurrency, formatDateTime, toVNDateString, addDays } from '@/lib/utils'
 import { toast } from 'sonner'
 import { fadeInUp, staggerContainer } from '@/lib/motionVariants'
 
@@ -54,10 +54,8 @@ export default function Dashboard() {
         })
 
         // Fetch revenue for the last 7 days
-        const endDate = new Date().toISOString().split('T')[0]
-        const startDateObj = new Date()
-        startDateObj.setDate(startDateObj.getDate() - 7)
-        const startDate = startDateObj.toISOString().split('T')[0]
+        const endDate = toVNDateString()
+        const startDate = addDays(endDate, -7)
         const chartData = await statsApi.getRevenue({ startDate, endDate })
         setRevenueOverTime(chartData.revenue_over_time || [])
       } catch (error) {

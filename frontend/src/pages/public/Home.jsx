@@ -22,7 +22,7 @@ import {
   Headset,
   Wallet,
 } from 'lucide-react'
-import { formatCurrency, formatDuration } from '@/lib/utils'
+import { formatCurrency, formatDuration, toVNDateString } from '@/lib/utils'
 import { toast } from 'sonner'
 import { staggerContainer, fadeInUp } from '@/lib/motionVariants'
 import heroImage from '@/assets/home-hero.jpg'
@@ -55,7 +55,7 @@ export default function Home() {
   const [searchParams, setSearchParams] = useState({
     origin: '',
     destination: '',
-    date: new Date().toISOString().split('T')[0],
+    date: toVNDateString(),
   })
 
   const [loadingRoutes, setLoadingRoutes] = useState(true)
@@ -260,7 +260,7 @@ export default function Home() {
                   <DateInput
                     type="date"
                     value={searchParams.date}
-                    min={new Date().toISOString().split('T')[0]}
+                    min={toVNDateString()}
                     onChange={(e) => setSearchParams(prev => ({ ...prev, date: e.target.value }))}
                     className="w-full h-10"
                   />
