@@ -22,6 +22,11 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ message: 'Tài khoản của bạn đã bị khóa.' })
     }
 
+    // JWT cấp trước lần đổi/đặt lại mật khẩu gần nhất không còn hiệu lực (iat tính bằng giây).
+    if (user.password_changed_at && decoded.iat < Math.floor(user.password_changed_at.getTime() / 1000)) {
+      return res.status(401).json({ message: 'Mật khẩu đã được thay đổi. Vui lòng đăng nhập lại.' })
+    }
+
     // Attach user context to request
     req.user = user
     next()

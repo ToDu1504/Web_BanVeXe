@@ -27,8 +27,15 @@ export function useShuttlePrint({ onPrinted } = {}) {
     }
   }
 
-  // Gọi khi hộp thoại in đóng (afterprint).
-  const handleDone = async () => {
+  // Gọi khi nhân viên trả lời "đã in xong chưa" sau khi hộp thoại in đóng.
+  // Trình duyệt không cho biết người dùng bấm In hay Hủy, nên chỉ đánh dấu đã
+  // in khi nhân viên xác nhận — nếu không, bấm Hủy cũng làm chuyến biến mất
+  // khỏi hàng chờ.
+  const handleDone = async (printed) => {
+    if (!printed) {
+      setEntries(null)
+      return
+    }
     try {
       await shuttleApi.markPrinted(tripIdsRef.current)
       onPrinted?.()

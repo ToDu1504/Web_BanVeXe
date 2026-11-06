@@ -1100,12 +1100,12 @@ const seedData = async () => {
     console.log(`   - Đã nạp ${incidents.length} sự cố chuyến xe (1 đã xử lý, ${openTrip ? 1 : 0} chưa xử lý).`);
 
     // Tài khoản demo để đăng nhập nhanh
-    const demoDriver = driverOf(vehicles[4], 0);
+    const demoDriver = driverOf(vehicles[0], 0);
     console.log("🌱 Hoàn tất nạp dữ liệu mẫu! Tài khoản demo (mật khẩu: password):");
     console.log(`   admin:     ${adminUser.email}`);
     console.log(`   nhân viên: ${staffUser.email}`);
     console.log(`   khách:     ${customerUser.email}`);
-    console.log(`   tài xế:    ${demoDriver.email} (${demoDriver.full_name}, xe ${vehicles[4].license_plate}) — mọi tài xế: taixe1|taixe2.<biển số viết liền>@datvexekhach.vn`);
+    console.log(`   tài xế:    ${demoDriver.email} (${demoDriver.full_name}, xe ${vehicles[0].license_plate}) — tài xế đánh số taixe1…taixe${driversByVehicle.size * 2}@datvexekhach.vn (lẻ = tài xế chính, chẵn = phụ của cùng xe)`);
     process.exit(0);
   } catch (error) {
     console.error("❌ Lỗi khi nạp dữ liệu mẫu:", error);

@@ -12,6 +12,8 @@ import Home from '@/pages/public/Home'
 import TripDetail from '@/pages/public/TripDetail'
 import Login from '@/pages/auth/Login'
 import Register from '@/pages/auth/Register'
+import ForgotPassword from '@/pages/auth/ForgotPassword'
+import ResetPassword from '@/pages/auth/ResetPassword'
 import Terms from '@/pages/public/Terms'
 import PrivacyPolicy from '@/pages/public/PrivacyPolicy'
 import CancellationPolicy from '@/pages/public/CancellationPolicy'
@@ -82,6 +84,22 @@ export default function AppRouter() {
         element={
           <PageLayout>
             <Register />
+          </PageLayout>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PageLayout>
+            <ForgotPassword />
+          </PageLayout>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <PageLayout>
+            <ResetPassword />
           </PageLayout>
         }
       />

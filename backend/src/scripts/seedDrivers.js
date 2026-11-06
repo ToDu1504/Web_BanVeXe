@@ -4,8 +4,9 @@ const { User, Vehicle, TripTemplate, Trip } = require('../models')
 const { validateDriverAssignment } = require('../utils/driverScheduling')
 
 // Tạo sẵn tài khoản tài xế cho DB ĐANG CÓ DỮ LIỆU (không xóa gì) và gán vào lịch:
-//   - Mỗi xe đang có TripTemplate/chuyến sắp chạy → 2 tài xế: taixe1.<bienso>
-//     (tài xế chính), taixe2.<bienso> (tài xế phụ) @datvexekhach.vn, mật khẩu "password".
+//   - Mỗi xe đang có TripTemplate/chuyến sắp chạy → 2 tài xế, đánh số liên tục theo
+//     thứ tự xe: taixe1 (chính) + taixe2 (phụ) cho xe thứ 1, taixe3 + taixe4 cho xe
+//     thứ 2, ... @datvexekhach.vn, mật khẩu "password".
 //   - Mọi mẫu chuyến của xe: driver_id = tài xế 1, co_driver_id = tài xế 2 (chỉ
 //     điền vị trí đang trống). Hai người luôn đi cùng xe nên lịch không chồng giờ.
 //   - Backfill chuyến 'scheduled' tương lai còn trống tài xế chính/phụ: chuyến sinh
@@ -31,6 +32,7 @@ const seedDrivers = async ({ log = console.log } = {}) => {
   const summary = {
     accountsCreated: 0,
     accountsReused: 0,
+    accountsRenamed: 0,
     templatesAssigned: 0,
     tripsAssigned: 0,
     tripsSkipped: 0,
@@ -50,22 +52,32 @@ const seedDrivers = async ({ log = console.log } = {}) => {
   ])]
   const vehicles = await Vehicle.findAll({ where: { id: { [Op.in]: vehicleIds } }, order: [['id', 'ASC']] })
 
-  // 1. Tài khoản: 2 tài xế / xe
+  // 1. Tài khoản: 2 tài xế / xe, đánh số liên tục theo thứ tự xe:
+  //    xe thứ 1 → taixe1 (chính) + taixe2 (phụ), xe thứ 2 → taixe3 + taixe4, ...
+  //    Tài khoản đã có được nhận ra qua SĐT (cố định theo xe), nên DB cũ dùng
+  //    email dạng taixe1.<biển số>@ được đổi sang tên mới khi chạy lại.
   const driversByVehicle = new Map() // vehicleId -> [driver1, driver2]
   for (const [vIndex, vehicle] of vehicles.entries()) {
     const pair = []
     for (const k of [1, 2]) {
-      const email = `taixe${k}.${plateSlug(vehicle.license_plate)}@datvexekhach.vn`
-      let driver = await User.findOne({ where: { email } })
+      const n = vIndex * 2 + k
+      const email = `taixe${n}@datvexekhach.vn`
+      // 10 số, đầu 038 — hợp lệ theo regex SĐT VN của Joi, không trùng giữa các tài xế
+      const phone = `038${String(vehicle.id).padStart(6, '0')}${k}`
+      const legacyEmail = `taixe${k}.${plateSlug(vehicle.license_plate)}@datvexekhach.vn`
+      let driver = await User.findOne({ where: { [Op.or]: [{ phone, role: 'driver' }, { email: legacyEmail }] } })
       if (driver) {
         summary.accountsReused++
+        if (driver.email !== email && !(await User.findOne({ where: { email } }))) {
+          driver.email = email
+          await driver.save()
+          summary.accountsRenamed++
+        }
       } else {
-        const n = vIndex * 2 + (k - 1)
         driver = await User.create({
-          full_name: driverName(n),
+          full_name: driverName(n - 1),
           email,
-          // 10 số, đầu 038 — hợp lệ theo regex SĐT VN của Joi, không trùng giữa các tài xế
-          phone: `038${String(vehicle.id).padStart(6, '0')}${k}`,
+          phone,
           password: DRIVER_PASSWORD,
           role: 'driver',
           is_active: true,
@@ -135,7 +147,7 @@ const seedDrivers = async ({ log = console.log } = {}) => {
   }
 
   log(
-    `   - Tài xế: tạo mới ${summary.accountsCreated}, dùng lại ${summary.accountsReused} (tài xế chính + phụ cho ${vehicles.length} xe); ` +
+    `   - Tài xế: tạo mới ${summary.accountsCreated}, dùng lại ${summary.accountsReused}, đổi email ${summary.accountsRenamed} (tài xế chính + phụ cho ${vehicles.length} xe); ` +
     `gán ${summary.templatesAssigned} mẫu chuyến, ${summary.tripsAssigned} chuyến (${summary.tripsSkipped} chuyến không đổi do trùng lịch/nghỉ).`
   )
   // driversByVehicle (vehicleId -> [tài xế 1, tài xế 2]) để seedData.js dựng
@@ -148,7 +160,7 @@ if (require.main === module) {
     .then(async () => {
       console.log('🚍 Đang tạo sẵn tài xế và gán vào lịch chạy (giữ nguyên dữ liệu)...')
       await seedDrivers()
-      console.log(`✅ Xong! Đăng nhập: taixe1.<biển số viết liền>@datvexekhach.vn / ${DRIVER_PASSWORD}`)
+      console.log(`✅ Xong! Đăng nhập: taixe1@datvexekhach.vn … taixeN@datvexekhach.vn / ${DRIVER_PASSWORD}`)
       process.exit(0)
     })
     .catch((error) => {

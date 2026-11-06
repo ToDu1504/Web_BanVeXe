@@ -1,9 +1,74 @@
 const { Op } = require('sequelize')
 const { Trip, Ticket, Invoice, User, Route, Vehicle } = require('../models')
-const { isMailConfigured, sendShuttleNotice } = require('../services/mailService')
+const { isMailConfigured, sendShuttleNotice, sendStationNotice } = require('../services/mailService')
 const { SHUTTLE_CUTOFF_MINUTES, SHUTTLE_PICKUP_LEAD_MINUTES, estimatePickupTime } = require('../utils/shuttle')
 
 const CHECK_INTERVAL_MS = Number(process.env.SHUTTLE_CHECK_INTERVAL_MS) || 60 * 1000
+
+// Khách tự đến bến được nhắc có mặt trước giờ chạy bao nhiêu phút.
+const STATION_ARRIVE_EARLY_MINUTES = Number(process.env.STATION_ARRIVE_EARLY_MINUTES) || 30
+
+// Gom vé theo hóa đơn: Map invoice_id -> tickets[].
+const groupByInvoice = (tickets) => {
+  const byInvoice = new Map()
+  for (const ticket of tickets) {
+    if (!byInvoice.has(ticket.invoice_id)) byInvoice.set(ticket.invoice_id, [])
+    byInvoice.get(ticket.invoice_id).push(ticket)
+  }
+  return byInvoice
+}
+
+const findTripTickets = (trip, pickupType, paymentStatuses) => Ticket.findAll({
+  where: { trip_id: trip.id, booking_status: 'booked', pickup_type: pickupType },
+  include: [{
+    model: Invoice,
+    where: { payment_status: { [Op.in]: paymentStatuses } },
+    include: [{ model: User, attributes: ['id', 'full_name', 'email'] }],
+  }],
+  order: [['seat_number', 'ASC']],
+})
+
+// Gửi 1 mail / hóa đơn bằng `send(owner, tickets)`; trả về { invoices, emailsSent }.
+const mailPerInvoice = async (tickets, send) => {
+  const byInvoice = groupByInvoice(tickets)
+  let emailsSent = 0
+  for (const invoiceTickets of byInvoice.values()) {
+    const owner = invoiceTickets[0].Invoice?.User
+    if (!owner) continue
+    if (await send(owner, invoiceTickets)) emailsSent++
+  }
+  return { invoices: byInvoice.size, emailsSent }
+}
+
+// Gửi mail báo xe trung chuyển cho từng chủ hóa đơn có vé đón (booked + paid)
+// của chuyến — 1 mail / hóa đơn. Dùng chung cho job chốt danh sách và nút
+// "Gửi mail" ở quầy (POST /api/shuttles/notify). Trả về { invoices, emailsSent }.
+const notifyShuttlePassengers = async (trip) => {
+  const tickets = await findTripTickets(trip, 'shuttle', ['paid'])
+  const pickupTime = estimatePickupTime(trip)
+  return mailPerInvoice(tickets, (owner, invoiceTickets) => sendShuttleNotice({
+    to: owner.email,
+    customerName: owner.full_name,
+    trip,
+    tickets: invoiceTickets,
+    pickupTime,
+  }))
+}
+
+// Nhắc khách tự đến bến có mặt trước giờ chạy STATION_ARRIVE_EARLY_MINUTES phút
+// (nút "Gửi mail" ở quầy). Gồm cả hóa đơn tiền mặt chưa thanh toán — khách vẫn
+// cần ra bến (và trả tiền tại quầy). Trả về { invoices, emailsSent }.
+const notifyStationPassengers = async (trip) => {
+  const tickets = await findTripTickets(trip, 'station', ['paid', 'pending'])
+  const arriveBy = new Date(new Date(trip.departure_time).getTime() - STATION_ARRIVE_EARLY_MINUTES * 60 * 1000)
+  return mailPerInvoice(tickets, (owner, invoiceTickets) => sendStationNotice({
+    to: owner.email,
+    customerName: owner.full_name,
+    trip,
+    tickets: invoiceTickets,
+    arriveBy,
+  }))
+}
 
 // Chốt danh sách đón trung chuyển (md/DonKhachTrungChuyen.md R5): chuyến
 // 'scheduled' còn <= SHUTTLE_CUTOFF_MINUTES phút nữa chạy mà chưa khóa thì đặt
@@ -36,35 +101,8 @@ const lockShuttleLists = async () => {
 
     if (!isMailConfigured() || !trip.Route?.shuttle_enabled) continue
 
-    const tickets = await Ticket.findAll({
-      where: { trip_id: trip.id, booking_status: 'booked', pickup_type: 'shuttle' },
-      include: [{
-        model: Invoice,
-        where: { payment_status: 'paid' },
-        include: [{ model: User, attributes: ['id', 'full_name', 'email'] }],
-      }],
-      order: [['seat_number', 'ASC']],
-    })
-
-    const byInvoice = new Map()
-    for (const ticket of tickets) {
-      if (!byInvoice.has(ticket.invoice_id)) byInvoice.set(ticket.invoice_id, [])
-      byInvoice.get(ticket.invoice_id).push(ticket)
-    }
-
-    const pickupTime = estimatePickupTime(trip)
-    for (const invoiceTickets of byInvoice.values()) {
-      const owner = invoiceTickets[0].Invoice?.User
-      if (!owner) continue
-      const ok = await sendShuttleNotice({
-        to: owner.email,
-        customerName: owner.full_name,
-        trip,
-        tickets: invoiceTickets,
-        pickupTime,
-      })
-      if (ok) emailsSent++
-    }
+    const { emailsSent: sent } = await notifyShuttlePassengers(trip)
+    emailsSent += sent
   }
 
   return { tripsLocked, emailsSent }
@@ -86,4 +124,4 @@ const startLockShuttleListsJob = () => {
   setInterval(run, CHECK_INTERVAL_MS)
 }
 
-module.exports = { lockShuttleLists, startLockShuttleListsJob }
+module.exports = { lockShuttleLists, notifyShuttlePassengers, notifyStationPassengers, startLockShuttleListsJob }

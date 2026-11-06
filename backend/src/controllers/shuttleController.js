@@ -1,6 +1,8 @@
 const { Op } = require('sequelize')
 const { Trip, Ticket, Invoice, Route, Vehicle, User } = require('../models')
 const { mapDbError } = require('../utils/dbErrors')
+const { isMailConfigured } = require('../services/mailService')
+const { notifyShuttlePassengers, notifyStationPassengers } = require('../jobs/lockShuttleLists')
 const {
   SHUTTLE_CUTOFF_MINUTES,
   ELIGIBLE_SHUTTLE_INVOICE,
@@ -25,11 +27,13 @@ const resolveWindow = (query) => {
 const shuttleController = {
   // @desc    Hàng chờ "Cần in danh sách đón" (R6, R7): chuyến đã khóa có khách
   //          đón chưa in / cần in lại / bị hủy sau khi in.
-  // @route   GET /api/shuttles/queue?from=&to=
+  //          ?include_printed=true: kèm cả chuyến đã in, không có thay đổi (để in lại).
+  // @route   GET /api/shuttles/queue?from=&to=&include_printed=
   // @access  Private/Staff/Admin
   getQueue: async (req, res) => {
     try {
       const { from, to } = resolveWindow(req.query)
+      const includePrinted = req.query.include_printed === 'true'
       const trips = await Trip.findAll({
         where: {
           departure_time: { [Op.gte]: from, [Op.lte]: to },
@@ -70,7 +74,7 @@ const shuttleController = {
         const cancelledAfterPrint = printed && trip.status === 'cancelled' && changedTripIds.has(trip.id)
         const needsReprint = printed && !cancelledAfterPrint && changedTripIds.has(trip.id)
         if (!printed && (shuttleCount === 0 || trip.status === 'cancelled')) continue
-        if (printed && !needsReprint && !cancelledAfterPrint) continue
+        if (printed && !needsReprint && !cancelledAfterPrint && (!includePrinted || trip.status === 'cancelled')) continue
         queue.push({
           ...trip.toJSON(),
           shuttle_count: shuttleCount,
@@ -161,6 +165,56 @@ const shuttleController = {
       const dbError = mapDbError(error)
       if (dbError) return res.status(dbError.status).json({ message: dbError.message })
       return res.status(500).json({ message: 'Lỗi máy chủ khi ghi nhận in danh sách đón.' })
+    }
+  },
+
+  // @desc    Gửi mail thông báo cho khách của các chuyến: khách đi trung chuyển
+  //          nhận giờ/địa chỉ đón, khách tự đến bến được nhắc có mặt sớm.
+  //          Dùng khi danh sách đón thay đổi sau lúc chốt hoặc khách báo chưa nhận.
+  // @route   POST /api/shuttles/notify
+  // @access  Private/Staff/Admin
+  notify: async (req, res) => {
+    try {
+      if (!isMailConfigured()) {
+        return res.status(400).json({ message: 'Máy chủ chưa cấu hình email (SMTP) nên không gửi được thông báo.' })
+      }
+      const trips = await Trip.findAll({
+        where: { id: { [Op.in]: req.body.trip_ids }, status: 'scheduled' },
+        include: [Route, Vehicle],
+      })
+      if (trips.length === 0) {
+        return res.status(400).json({ message: 'Không có chuyến sắp chạy nào để gửi thông báo.' })
+      }
+
+      const shuttle = { invoices: 0, emailsSent: 0 }
+      const station = { invoices: 0, emailsSent: 0 }
+      for (const trip of trips) {
+        const s = await notifyShuttlePassengers(trip)
+        shuttle.invoices += s.invoices
+        shuttle.emailsSent += s.emailsSent
+        const st = await notifyStationPassengers(trip)
+        station.invoices += st.invoices
+        station.emailsSent += st.emailsSent
+      }
+
+      const invoices = shuttle.invoices + station.invoices
+      const emailsSent = shuttle.emailsSent + station.emailsSent
+      if (invoices === 0) {
+        return res.status(200).json({ invoices, emailsSent, shuttle, station, message: 'Chuyến chưa có khách nào để gửi thông báo.' })
+      }
+      const skipped = invoices - emailsSent
+      const note = skipped > 0 ? ` ${skipped} khách không nhận được (email mẫu/nội bộ hoặc gửi lỗi).` : ''
+      return res.status(200).json({
+        invoices,
+        emailsSent,
+        shuttle,
+        station,
+        message: `Đã gửi ${emailsSent}/${invoices} email: ${shuttle.emailsSent} báo xe trung chuyển đón, `
+          + `${station.emailsSent} nhắc khách tự đến bến có mặt sớm.${note}`,
+      })
+    } catch (error) {
+      console.error('Lỗi shuttle notify:', error)
+      return res.status(500).json({ message: 'Lỗi máy chủ khi gửi thông báo xe trung chuyển.' })
     }
   },
 }

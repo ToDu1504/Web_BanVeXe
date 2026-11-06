@@ -5,60 +5,66 @@ const { isMailConfigured, sendDepartureReminder } = require('../services/mailSer
 const REMINDER_MINUTES = Number(process.env.DEPARTURE_REMINDER_MINUTES) || 30
 const CHECK_INTERVAL_MS = Number(process.env.DEPARTURE_REMINDER_CHECK_INTERVAL_MS) || 60 * 1000
 
-// Tìm chuyến 'scheduled' sắp khởi hành trong REMINDER_MINUTES phút tới mà chưa
-// nhắc, gửi 1 mail / hóa đơn cho chủ hóa đơn có vé 'booked'.
+// Tìm vé 'booked' chưa nhắc của các chuyến 'scheduled' sắp khởi hành trong
+// REMINDER_MINUTES phút tới, gửi 1 mail / (hóa đơn, chuyến) cho chủ hóa đơn.
+// Đánh dấu theo từng vé (tickets.reminder_sent_at) chứ không theo chuyến, nên vé
+// đặt khi chuyến đã lọt vào khung (khách đặt sát giờ) vẫn được nhắc ở lượt sau.
 const sendDepartureReminders = async () => {
   const now = new Date()
   const windowEnd = new Date(now.getTime() + REMINDER_MINUTES * 60 * 1000)
 
-  const trips = await Trip.findAll({
-    where: {
-      status: 'scheduled',
-      reminder_sent_at: null,
-      departure_time: { [Op.gt]: now, [Op.lte]: windowEnd },
-    },
-    include: [Route, Vehicle],
+  const tickets = await Ticket.findAll({
+    where: { booking_status: 'booked', reminder_sent_at: null },
+    include: [
+      {
+        model: Trip,
+        required: true,
+        where: { status: 'scheduled', departure_time: { [Op.gt]: now, [Op.lte]: windowEnd } },
+        include: [Route, Vehicle],
+      },
+      { model: Invoice, include: [{ model: User, attributes: ['id', 'full_name', 'email'] }] },
+    ],
+    order: [['trip_id', 'ASC'], ['seat_number', 'ASC']],
   })
 
-  let tripsReminded = 0
+  const groups = new Map()
+  for (const ticket of tickets) {
+    const key = `${ticket.trip_id}:${ticket.invoice_id}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(ticket)
+  }
+
+  const tripsReminded = new Set()
   let emailsSent = 0
 
-  for (const trip of trips) {
-    // Giành quyền xử lý chuyến bằng cập nhật có điều kiện — idempotent kể cả
-    // khi hai lượt chạy chồng nhau.
-    const [claimed] = await Trip.update(
+  for (const groupTickets of groups.values()) {
+    const { Trip: trip, Invoice: invoice } = groupTickets[0]
+    // Giành quyền gửi bằng cập nhật có điều kiện — idempotent kể cả khi hai
+    // lượt chạy chồng nhau.
+    const [claimed] = await Ticket.update(
       { reminder_sent_at: new Date() },
-      { where: { id: trip.id, reminder_sent_at: null } },
+      { where: { id: groupTickets.map((t) => t.id), reminder_sent_at: null } },
     )
     if (!claimed) continue
 
-    const tickets = await Ticket.findAll({
-      where: { trip_id: trip.id, booking_status: 'booked' },
-      include: [{ model: Invoice, include: [{ model: User, attributes: ['id', 'full_name', 'email'] }] }],
-      order: [['seat_number', 'ASC']],
+    // Giữ trips.reminder_sent_at = lần nhắc đầu tiên của chuyến (tham khảo).
+    if (!trip.reminder_sent_at) {
+      await Trip.update({ reminder_sent_at: new Date() }, { where: { id: trip.id, reminder_sent_at: null } })
+    }
+    tripsReminded.add(trip.id)
+
+    const owner = invoice?.User
+    if (!owner) continue
+    const ok = await sendDepartureReminder({
+      to: owner.email,
+      customerName: owner.full_name,
+      trip,
+      tickets: groupTickets,
     })
-
-    const byInvoice = new Map()
-    for (const ticket of tickets) {
-      if (!byInvoice.has(ticket.invoice_id)) byInvoice.set(ticket.invoice_id, [])
-      byInvoice.get(ticket.invoice_id).push(ticket)
-    }
-
-    for (const invoiceTickets of byInvoice.values()) {
-      const owner = invoiceTickets[0].Invoice?.User
-      if (!owner) continue
-      const ok = await sendDepartureReminder({
-        to: owner.email,
-        customerName: owner.full_name,
-        trip,
-        tickets: invoiceTickets,
-      })
-      if (ok) emailsSent++
-    }
-    tripsReminded++
+    if (ok) emailsSent++
   }
 
-  return { tripsReminded, emailsSent }
+  return { tripsReminded: tripsReminded.size, emailsSent }
 }
 
 const startDepartureReminderJob = () => {

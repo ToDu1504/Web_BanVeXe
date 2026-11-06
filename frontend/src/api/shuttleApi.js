@@ -16,4 +16,9 @@ export const shuttleApi = {
     const response = await axiosInstance.post('/shuttles/mark-printed', { trip_ids: tripIds })
     return response.data
   },
+  // Gửi (lại) mail báo xe trung chuyển cho khách của các chuyến
+  notify: async (tripIds) => {
+    const response = await axiosInstance.post('/shuttles/notify', { trip_ids: tripIds })
+    return response.data
+  },
 }

@@ -1,6 +1,16 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { formatDateTime } from '@/lib/utils'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 // Tờ in "Danh sách đón khách" cho tài xế trung chuyển (md/DonKhachTrungChuyen.md).
 // Mỗi chuyến một khối, các vé cùng địa chỉ gộp thành một nhóm. Chỉ render khi
@@ -8,12 +18,17 @@ import { formatDateTime } from '@/lib/utils'
 // window.print() ngay sau khi mount.
 //
 // Portal ra document.body (không nằm trong Dialog cuộn) để không bị cắt khi in,
-// cùng mẫu với manifest ở TripPassengersDialog. Khi in xong gọi `onDone()` —
-// nơi gọi dùng nó để đánh dấu đã in (POST /api/shuttles/mark-printed).
+// cùng mẫu với manifest ở TripPassengersDialog. Hộp thoại in đóng (in hay hủy
+// đều như nhau với trình duyệt) thì hỏi nhân viên đã in xong chưa rồi gọi
+// `onDone(printed)` — nơi gọi chỉ đánh dấu đã in (POST /api/shuttles/mark-printed)
+// khi printed = true.
 export default function ShuttlePickupSheet({ entries, onDone }) {
+  const [asking, setAsking] = useState(false)
+
   useEffect(() => {
     if (!entries) return undefined
-    const handleAfterPrint = () => onDone?.()
+    setAsking(false)
+    const handleAfterPrint = () => setAsking(true)
     window.addEventListener('afterprint', handleAfterPrint, { once: true })
     const timer = setTimeout(() => window.print(), 150)
     return () => {
@@ -99,5 +114,28 @@ export default function ShuttlePickupSheet({ entries, onDone }) {
     </div>
   )
 
-  return createPortal(sheet, document.body)
+  const answer = (printed) => {
+    setAsking(false)
+    onDone?.(printed)
+  }
+
+  return (
+    <>
+      {createPortal(sheet, document.body)}
+      <AlertDialog open={asking} onOpenChange={(open) => !open && answer(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Đã in xong danh sách đón?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Chọn "Đã in" để ghi nhận và gỡ chuyến khỏi hàng chờ. Nếu bạn đã hủy hoặc máy in lỗi, chọn "Chưa in" — chuyến vẫn nằm trong hàng chờ để in lại.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => answer(false)}>Chưa in</AlertDialogCancel>
+            <AlertDialogAction onClick={() => answer(true)}>Đã in</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
 }

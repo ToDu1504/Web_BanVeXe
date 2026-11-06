@@ -1,0 +1,61 @@
+services:
+  db:
+    image: mysql:8.4
+    container_name: banvexe-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Chưa đặt DB_ROOT_PASSWORD trong .env ở thư mục gốc}
+      MYSQL_DATABASE: bus_ticket_dev
+      TZ: Asia/Ho_Chi_Minh
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3307:3306" # 3307 để chạy song song với MySQL của XAMPP (3306)
+    volumes:
+      - banvexe-db-data:/var/lib/mysql
+    healthcheck:
+      # 127.0.0.1 (TCP), không dùng localhost (socket): lần chạy đầu MySQL bật một
+      # server tạm chỉ nghe socket để khởi tạo — ping qua socket sẽ báo "healthy" quá sớm.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  backend:
+    build: ./backend
+    container_name: banvexe-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Dùng chung backend/.env (JWT, MoMo, SMTP...), rồi ghi đè phần khác biệt khi chạy trong Docker.
+    env_file: ./backend/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: bus_ticket_dev
+      DB_USER: root
+      DB_PASS: ${DB_ROOT_PASSWORD}
+      CLIENT_URL: http://localhost:8081
+      MOMO_REDIRECT_URL: http://localhost:8081/payment/momo/return
+      MYSQLDUMP_PATH: mysqldump
+      MYSQL_PATH: mysql
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - ./backend/backups:/app/backups # file sao lưu nằm trên máy thật
+    ports:
+      - "8082:8080" # gọi thẳng API khi cần debug: http://localhost:8082/api/health
+
+  frontend:
+    build: ./frontend
+    container_name: banvexe-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8081:80"
+
+volumes:
+  banvexe-db-data:

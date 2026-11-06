@@ -10,7 +10,7 @@ import PageHeader from '@/components/common/PageHeader'
 import TableSkeleton from '@/components/common/TableSkeleton'
 import EmptyState from '@/components/common/EmptyState'
 import ShuttlePickupSheet from '@/components/features/ShuttlePickupSheet'
-import { Bus, Check, Loader2, Printer, RefreshCw } from 'lucide-react'
+import { Bus, Check, Loader2, Mail, Printer, RefreshCw } from 'lucide-react'
 import { formatDateTime, cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { fadeInUp } from '@/lib/motionVariants'
@@ -42,13 +42,18 @@ export default function ShuttlePickups() {
   const [queue, setQueue] = useState([])
   const [loading, setLoading] = useState(true)
   const [windowValue, setWindowValue] = useState('default')
+  const [showPrinted, setShowPrinted] = useState(false)
   const [selected, setSelected] = useState(new Set())
   const [acknowledgingId, setAcknowledgingId] = useState(null)
+  const [notifyingId, setNotifyingId] = useState(null)
 
   const fetchQueue = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoading(true)
-      const data = await shuttleApi.getQueue(resolveParams(windowValue))
+      const data = await shuttleApi.getQueue({
+        ...resolveParams(windowValue),
+        ...(showPrinted && { include_printed: true }),
+      })
       setQueue(data)
       setSelected((prev) => new Set([...prev].filter((id) => data.some((t) => t.id === id && !t.is_cancelled_after_print))))
     } catch {
@@ -56,7 +61,7 @@ export default function ShuttlePickups() {
     } finally {
       setLoading(false)
     }
-  }, [windowValue])
+  }, [windowValue, showPrinted])
 
   useEffect(() => {
     fetchQueue()
@@ -91,15 +96,37 @@ export default function ShuttlePickups() {
     }
   }
 
+  // Gửi (lại) mail báo xe trung chuyển cho khách. `key` = id chuyến, hoặc 'selected'.
+  const handleNotify = async (tripIds, key) => {
+    setNotifyingId(key)
+    try {
+      const result = await shuttleApi.notify(tripIds)
+      if (result.emailsSent > 0) toast.success(result.message)
+      else toast.info(result.message)
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Không thể gửi thông báo')
+    } finally {
+      setNotifyingId(null)
+    }
+  }
+
   return (
     <motion.div initial="hidden" animate="show" variants={fadeInUp} className="space-y-6">
       <PageHeader
         title="Danh Sách Đón Trung Chuyển"
-        description="Các chuyến đã chốt danh sách đón, cần in đưa cho tài xế trung chuyển."
+        description="Các chuyến đã chốt danh sách đón, cần in đưa cho tài xế trung chuyển. Chuyến đã in sẽ rời hàng chờ — bật “Hiện cả chuyến đã in” để in lại."
         action={
           <div className="flex gap-2">
             <Button variant="outline" size="icon" onClick={() => fetchQueue()} disabled={loading} aria-label="Tải lại">
               <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleNotify([...selected], 'selected')}
+              disabled={selected.size === 0 || notifyingId !== null}
+            >
+              {notifyingId === 'selected' ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Mail className="h-4 w-4 mr-1.5" />}
+              Gửi mail đã chọn ({selected.size})
             </Button>
             <Button
               onClick={() => shuttlePrint.print([...selected])}
@@ -130,6 +157,15 @@ export default function ShuttlePickups() {
                 {w.label}
               </button>
             ))}
+            <label className="ml-auto inline-flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]">
+              <input
+                type="checkbox"
+                checked={showPrinted}
+                onChange={(e) => setShowPrinted(e.target.checked)}
+                className="h-4 w-4 accent-[hsl(var(--primary))]"
+              />
+              Hiện cả chuyến đã in
+            </label>
           </div>
 
           {loading ? (
@@ -188,6 +224,8 @@ export default function ShuttlePickups() {
                         <Badge variant="destructive" className="text-[10px]">Chuyến đã hủy – báo tài xế trung chuyển</Badge>
                       ) : trip.needs_reprint ? (
                         <Badge variant="warning" className="text-[10px]">Cần in lại (có thay đổi)</Badge>
+                      ) : trip.shuttle_list_printed_at ? (
+                        <Badge variant="outline" className="text-[10px]">Đã in lúc {formatDateTime(trip.shuttle_list_printed_at)}</Badge>
                       ) : (
                         <Badge variant="secondary" className="text-[10px]">Chưa in</Badge>
                       )}
@@ -205,14 +243,26 @@ export default function ShuttlePickups() {
                             : <><Check className="h-3.5 w-3.5 mr-1" /> Đã xử lý</>}
                         </Button>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => shuttlePrint.print([trip.id])}
-                          disabled={shuttlePrint.loading}
-                        >
-                          <Printer className="h-3.5 w-3.5 mr-1" /> In
-                        </Button>
+                        <div className="inline-flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleNotify([trip.id], trip.id)}
+                            disabled={notifyingId !== null}
+                          >
+                            {notifyingId === trip.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <><Mail className="h-3.5 w-3.5 mr-1" /> Gửi mail</>}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => shuttlePrint.print([trip.id])}
+                            disabled={shuttlePrint.loading}
+                          >
+                            <Printer className="h-3.5 w-3.5 mr-1" /> {trip.shuttle_list_printed_at ? 'In lại' : 'In'}
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>

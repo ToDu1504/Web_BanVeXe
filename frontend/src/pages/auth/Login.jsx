@@ -90,25 +90,33 @@ export default function Login() {
             </div>
           </FormField>
 
-          <FormField label="Mật khẩu" htmlFor="password" error={errors.password?.message}>
-            <div className="relative">
-              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
-              <Input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                {...register('password')}
-                className={`pl-9 pr-10 ${errors.password ? 'border-[hsl(var(--destructive))]' : ''}`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </FormField>
+          <div className="relative">
+            <Link
+              to="/forgot-password"
+              className="absolute right-0 top-0 text-xs font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:underline"
+            >
+              Quên mật khẩu?
+            </Link>
+            <FormField label="Mật khẩu" htmlFor="password" error={errors.password?.message}>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  {...register('password')}
+                  className={`pl-9 pr-10 ${errors.password ? 'border-[hsl(var(--destructive))]' : ''}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </FormField>
+          </div>
         </CardContent>
         <CardFooter>
           <Button type="submit" className="w-full font-semibold" size="lg" disabled={loading}>

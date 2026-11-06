@@ -11,5 +11,6 @@ router.use(protect, authorize('staff', 'admin'))
 router.get('/queue', shuttleController.getQueue)
 router.get('/pickup-list', shuttleController.getPickupList)
 router.post('/mark-printed', validate(schemas.markShuttlePrinted), shuttleController.markPrinted)
+router.post('/notify', validate(schemas.markShuttlePrinted), shuttleController.notify)
 
 module.exports = router

@@ -48,6 +48,25 @@ const schemas = {
     }),
   }),
 
+  forgotPassword: Joi.object({
+    email: Joi.string().email().required().messages({
+      'string.email': 'Email không đúng định dạng.',
+      'any.required': 'Email là bắt buộc.',
+    }),
+  }),
+
+  resetPassword: Joi.object({
+    token: Joi.string().hex().length(64).required().messages({
+      'string.hex': 'Link đặt lại mật khẩu không hợp lệ.',
+      'string.length': 'Link đặt lại mật khẩu không hợp lệ.',
+      'any.required': 'Thiếu mã đặt lại mật khẩu.',
+    }),
+    newPassword: Joi.string().min(6).required().messages({
+      'string.min': 'Mật khẩu mới phải có ít nhất 6 ký tự.',
+      'any.required': 'Mật khẩu mới là bắt buộc.',
+    }),
+  }),
+
   // Admin User CRUD
   createUser: Joi.object({
     full_name: Joi.string().min(2).required(),

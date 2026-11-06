@@ -115,6 +115,26 @@ const sendShuttleNotice = ({ to, customerName, trip, tickets, pickupTime }) => {
   })
 }
 
+// Báo khách tự đến bến (không đi trung chuyển) có mặt sớm — gửi từ nút
+// "Gửi mail" ở quầy (POST /api/shuttles/notify).
+const sendStationNotice = ({ to, customerName, trip, tickets, arriveBy }) => {
+  const rows = tickets
+    .map((t) => `<li>Ghế <b>${escapeHtml(t.seat_number)}</b> — ${escapeHtml(t.passenger_name)}</li>`)
+    .join('')
+  const station = trip.Route?.origin_station || trip.Route?.origin
+  return sendMail({
+    to,
+    subject: `Vui lòng có mặt tại bến trước ${formatVNDateTime(arriveBy)} — chuyến ${formatVNDateTime(trip.departure_time)}`,
+    html: `
+      <p>Xin chào ${escapeHtml(customerName)},</p>
+      <p>Chuyến xe của bạn sắp khởi hành. Vui lòng có mặt tại bến${station ? ` <b>${escapeHtml(station)}</b>` : ''} trước <b>${formatVNDateTime(arriveBy)}</b> để làm thủ tục lên xe — xe sẽ xuất bến đúng giờ.</p>
+      ${tripSummaryHtml(trip)}
+      <p><b>Vé của bạn:</b></p>
+      <ul>${rows}</ul>
+      <p>Chúc quý khách thượng lộ bình an!</p>`,
+  })
+}
+
 const sendDriverAssigned = ({ driver, trip, isCoDriver = false }) => sendMail({
   to: driver.email,
   subject: `Bạn được phân công ${isCoDriver ? 'làm tài xế phụ ' : ''}chuyến ${formatVNDateTime(trip.departure_time)}`,
@@ -159,13 +179,27 @@ const sendIncidentNotice = ({ to, customerName, trip, incident }) => {
   })
 }
 
+const sendPasswordReset = ({ to, fullName, resetUrl, ttlMinutes }) => sendMail({
+  to,
+  subject: 'Đặt lại mật khẩu tài khoản Đặt Vé Xe Khách',
+  html: `
+    <p>Xin chào ${escapeHtml(fullName)},</p>
+    <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Bấm vào nút dưới đây để đặt mật khẩu mới:</p>
+    <p><a href="${escapeHtml(resetUrl)}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none">Đặt lại mật khẩu</a></p>
+    <p>Hoặc mở link: <a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a></p>
+    <p>Link chỉ dùng được một lần và hết hạn sau <b>${escapeHtml(ttlMinutes)} phút</b>.</p>
+    <p>Nếu bạn không yêu cầu, hãy bỏ qua email này — mật khẩu của bạn vẫn giữ nguyên.</p>`,
+})
+
 module.exports = {
   isMailConfigured,
   isDeliverableEmail,
   sendMail,
   sendDepartureReminder,
   sendShuttleNotice,
+  sendStationNotice,
   sendDriverAssigned,
   sendDriverUnassigned,
   sendIncidentNotice,
+  sendPasswordReset,
 }

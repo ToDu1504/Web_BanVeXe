@@ -98,6 +98,11 @@ const Ticket = sequelize.define('Ticket', {
     type: DataTypes.DATE,
     allowNull: true,
   },
+  // Lúc đã gửi mail nhắc chuyến cho vé này (jobs/sendDepartureReminders.js).
+  reminder_sent_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
 }, {
   tableName: 'tickets',
   timestamps: true,
